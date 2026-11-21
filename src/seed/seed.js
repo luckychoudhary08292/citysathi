@@ -212,10 +212,18 @@ function makeCityServices() {
 }
 
 async function seedDatabaseIfEmpty() {
+  const db = mongoose.connection.db;
+  const requiredCollections = ["cities", "categories", "users", "trips", "tips"];
+  for (const name of requiredCollections) {
+    if (!(await db.listCollections({ name }, { nameOnly: true }).hasNext())) {
+      await db.createCollection(name);
+    }
+  }
+
   const places = makePlaces();
   const services = makeCityServices();
-  const cityCollection = mongoose.connection.db.collection("cities");
-  const categoryCollection = mongoose.connection.db.collection("categories");
+  const cityCollection = db.collection("cities");
+  const categoryCollection = db.collection("categories");
   const categories = cities.flatMap((city) =>
     Object.entries(categoryFilters[city.id]).map(([category, subCategories]) => ({
       id: `${city.id}_${category}`,
@@ -244,7 +252,15 @@ async function seedDatabaseIfEmpty() {
   }));
 
   await cityCollection.createIndex({ id: 1 }, { unique: true });
+  await cityCollection.createIndex({ collectionName: 1 }, { unique: true });
   await categoryCollection.createIndex({ cityId: 1, category: 1 }, { unique: true });
+  await db.collection("users").createIndex({ userId: 1 }, { unique: true });
+  await db.collection("users").createIndex({ usernameLower: 1 }, { unique: true });
+  await db.collection("users").createIndex({ email: 1 }, { unique: true });
+  await db.collection("trips").createIndex({ id: 1 }, { unique: true });
+  await db.collection("trips").createIndex({ userId: 1 });
+  await db.collection("tips").createIndex({ id: 1 }, { unique: true });
+  await db.collection("tips").createIndex({ placeId: 1 });
 
   for (const city of cities) {
     const { collectionName, ...cityFields } = city;
@@ -254,7 +270,7 @@ async function seedDatabaseIfEmpty() {
       { upsert: true }
     );
 
-    const personalCollection = mongoose.connection.db.collection(collectionName);
+    const personalCollection = db.collection(collectionName);
     await personalCollection.createIndex({ id: 1 }, { unique: true });
     const cityPlaces = places.filter((place) => place.cityId === city.id);
     const cityServices = services.filter((service) => service.cityId === city.id);
