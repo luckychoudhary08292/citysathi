@@ -9,7 +9,7 @@ const tipSchema = new mongoose.Schema(
     rating: { type: Number, required: true, min: 0, max: 5 },
     timestamp: { type: Number, required: true, default: Date.now },
   },
-  { versionKey: false }
+  { versionKey: false, collection: "tips" }
 );
 
 module.exports = mongoose.model("Tip", tipSchema);

@@ -1,18 +1,57 @@
 require("dotenv").config();
 
 const mongoose = require("mongoose");
-const City = require("../models/City");
-const Place = require("../models/Place");
-const CityService = require("../models/CityService");
-const PromoBanner = require("../models/PromoBanner");
 
 const cities = [
-  { id: "indore", name: "Indore", state: "Madhya Pradesh", latitude: 22.7196, longitude: 75.8577, heroImageUrl: "https://images.unsplash.com/photo-1599661046827-dacff0c0f0a2?auto=format&fit=crop&w=1800&q=90", collectionName: "indore_places" },
-  { id: "bhopal", name: "Bhopal", state: "Madhya Pradesh", latitude: 23.2599, longitude: 77.4126, heroImageUrl: "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=1800&q=90", collectionName: "bhopal_places" },
-  { id: "bengaluru", name: "Bengaluru", state: "Karnataka", latitude: 12.9716, longitude: 77.5946, heroImageUrl: "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1800&q=90", collectionName: "bengaluru_places" },
-  { id: "jaipur", name: "Jaipur", state: "Rajasthan", latitude: 26.9124, longitude: 75.7873, heroImageUrl: "https://images.unsplash.com/photo-1477587458883-47145ed94245?auto=format&fit=crop&w=1800&q=90", collectionName: "jaipur_places" },
-  { id: "delhi", name: "Delhi", state: "Delhi", latitude: 28.6139, longitude: 77.209, heroImageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=1800&q=90", collectionName: "delhi_places" },
+  { id: "indore", name: "Indore", state: "Madhya Pradesh", latitude: 22.7196, longitude: 75.8577, heroImageUrl: "https://images.unsplash.com/photo-1599661046827-dacff0c0f0a2?auto=format&fit=crop&w=1800&q=90", collectionName: "city_indore" },
+  { id: "bhopal", name: "Bhopal", state: "Madhya Pradesh", latitude: 23.2599, longitude: 77.4126, heroImageUrl: "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=1800&q=90", collectionName: "city_bhopal" },
+  { id: "bengaluru", name: "Bengaluru", state: "Karnataka", latitude: 12.9716, longitude: 77.5946, heroImageUrl: "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1800&q=90", collectionName: "city_bengaluru" },
+  { id: "jaipur", name: "Jaipur", state: "Rajasthan", latitude: 26.9124, longitude: 75.7873, heroImageUrl: "https://images.unsplash.com/photo-1477587458883-47145ed94245?auto=format&fit=crop&w=1800&q=90", collectionName: "city_jaipur" },
+  { id: "delhi", name: "Delhi", state: "Delhi", latitude: 28.6139, longitude: 77.209, heroImageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=1800&q=90", collectionName: "city_delhi" },
 ];
+
+const categoryFilters = {
+  indore: {
+    HERITAGE: ["Royal Palace", "Historic", "Temple", "Architecture"],
+    FOOD: ["Street Food", "Namkeen", "Local Cuisine"],
+    SHOPPING: ["Local Market", "Mall", "Handicrafts"],
+    ENTERTAINMENT: ["Cinema", "Family", "Live Events"],
+    NATURE: ["Lake", "Garden", "Wildlife"],
+    CULTURE: ["Museum", "Textile", "Local History"],
+  },
+  bhopal: {
+    HERITAGE: ["Mosque", "Palace", "Historic", "Architecture"],
+    FOOD: ["Street Food", "Bhopali Cuisine", "Cafe"],
+    SHOPPING: ["New Market", "Mall", "Crafts"],
+    ENTERTAINMENT: ["Arts", "Performance", "Family"],
+    NATURE: ["Upper Lake", "Wildlife", "Garden"],
+    CULTURE: ["Tribal Art", "Museum", "Exhibition"],
+  },
+  jaipur: {
+    HERITAGE: ["Forts", "Palaces", "Observatory", "UNESCO"],
+    FOOD: ["Rajasthani Cuisine", "Street Food", "Sweets"],
+    SHOPPING: ["Bazaars", "Jewelry", "Textiles"],
+    ENTERTAINMENT: ["Cinema", "Folk Music", "Family"],
+    NATURE: ["Gardens", "Hills", "Wildlife"],
+    CULTURE: ["Museum", "Block Printing", "Rajput History"],
+  },
+  bengaluru: {
+    HERITAGE: ["Royal Palace", "Historic", "Architecture", "Monument"],
+    FOOD: ["South Indian", "Cafe", "Food Street"],
+    SHOPPING: ["Commercial Street", "Technology", "Handicrafts"],
+    ENTERTAINMENT: ["Live Music", "Cinema", "Family"],
+    NATURE: ["Urban Park", "Botanical Garden", "Lake"],
+    CULTURE: ["Science Museum", "Kannada Culture", "Exhibition"],
+  },
+  delhi: {
+    HERITAGE: ["Mughal Forts", "UNESCO", "Tombs", "Monuments"],
+    FOOD: ["Old Delhi", "Street Food", "Mughlai Cuisine"],
+    SHOPPING: ["Bazaars", "Markets", "Modern Retail"],
+    ENTERTAINMENT: ["Promenade", "Cinema", "Live Events"],
+    NATURE: ["Historic Gardens", "Urban Park", "Birding"],
+    CULTURE: ["National Museum", "Art Gallery", "History"],
+  },
+};
 
 const placesByCity = {
   indore: [
@@ -123,6 +162,7 @@ function makePlaces() {
   return cities.flatMap((city) =>
     placesByCity[city.id].map(([category, name, subtitle, subCategories], index) => ({
       id: `${slug(name)}_${city.id}`,
+      docType: "place",
       cityId: city.id,
       name,
       subtitle,
@@ -158,6 +198,7 @@ function makeCityServices() {
   return cities.flatMap((city) =>
     serviceInfo.map(([group, name, subtitle, distanceOrHours, phone], index) => ({
       id: `${city.id}_${group.toLowerCase()}_service`,
+      docType: "service",
       cityId: city.id,
       group,
       name: `${city.name} ${name}`,
@@ -170,45 +211,85 @@ function makeCityServices() {
   );
 }
 
-function upsertOperations(Model, docs) {
-  return Model.bulkWrite(
-    docs.map((doc) => ({
-      updateOne: {
-        filter: { id: doc.id },
-        update: { $setOnInsert: doc },
-        upsert: true,
-      },
-    })),
-    { ordered: true }
-  );
-}
-
 async function seedDatabaseIfEmpty() {
-  if (await City.exists({})) {
-    console.log("Seed skipped: cities collection is not empty");
-    return false;
-  }
-
   const places = makePlaces();
   const services = makeCityServices();
-  const banners = cities.map((city, index) => ({
-    id: `promo_${city.id}_1`,
+  const cityCollection = mongoose.connection.db.collection("cities");
+  const categoryCollection = mongoose.connection.db.collection("categories");
+  const categories = cities.flatMap((city) =>
+    Object.entries(categoryFilters[city.id]).map(([category, subCategories]) => ({
+      id: `${city.id}_${category}`,
+      cityId: city.id,
+      category,
+      title: "Places & Attractions",
+      subCategories,
+    }))
+  );
+  const homeMeta = cities.map((city, index) => ({
+    id: "home_meta",
+    docType: "home_meta",
     cityId: city.id,
-    badgeText: "FEATURED",
-    title: `${city.name} Weekend Pass`,
-    subtitle: "Curated heritage walks and local food trails ready to plan.",
-    ctaLabel: "Plan Trip",
-    imageUrl: imageUrls[index % imageUrls.length],
-    targetRoute: "plan_trip",
+    cityName: city.name,
+    heroSubtitle: `Unforgettable journeys in ${city.name},\ncreated for you.`,
+    headerImageUrl: city.heroImageUrl,
+    promoBanner: {
+      id: `promo_${city.id}_1`,
+      badgeText: "FEATURED",
+      title: `${city.name} Weekend Pass`,
+      subtitle: "Curated heritage walks and local food trails ready to plan.",
+      ctaLabel: "Plan Trip",
+      imageUrl: imageUrls[index % imageUrls.length],
+      targetRoute: "plan_trip",
+    },
   }));
 
-  await upsertOperations(Place, places);
-  await upsertOperations(CityService, services);
-  await upsertOperations(PromoBanner, banners);
-  await upsertOperations(City, cities);
+  await cityCollection.createIndex({ id: 1 }, { unique: true });
+  await categoryCollection.createIndex({ cityId: 1, category: 1 }, { unique: true });
 
+  for (const city of cities) {
+    const { collectionName, ...cityFields } = city;
+    await cityCollection.updateOne(
+      { id: city.id },
+      { $set: { collectionName }, $setOnInsert: cityFields },
+      { upsert: true }
+    );
+
+    const personalCollection = mongoose.connection.db.collection(collectionName);
+    await personalCollection.createIndex({ id: 1 }, { unique: true });
+    const cityPlaces = places.filter((place) => place.cityId === city.id);
+    const cityServices = services.filter((service) => service.cityId === city.id);
+    const cityHomeMeta = homeMeta.find((meta) => meta.cityId === city.id);
+    const documents = [cityHomeMeta, ...cityPlaces, ...cityServices];
+    if (documents.length) {
+      await personalCollection.bulkWrite(
+        documents.map((doc) => ({
+          updateOne: {
+            filter: { id: doc.id },
+            update: { $setOnInsert: doc },
+            upsert: true,
+          },
+        })),
+        { ordered: true }
+      );
+    }
+  }
+
+  if (categories.length) {
+    await categoryCollection.bulkWrite(
+      categories.map((doc) => ({
+        updateOne: {
+          filter: { cityId: doc.cityId, category: doc.category },
+          update: { $setOnInsert: doc },
+          upsert: true,
+        },
+      })),
+      { ordered: true }
+    );
+  }
+
+  const insertedCategoryCount = categories.length;
   console.log(
-    `Seeded ${cities.length} cities, ${places.length} places, ${services.length} city services, and ${banners.length} banners`
+    `Seed initializer checked ${cities.length} cities, ${places.length} places, ${services.length} services, and ${insertedCategoryCount} categories`
   );
   return true;
 }

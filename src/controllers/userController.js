@@ -1,5 +1,5 @@
 const City = require("../models/City");
-const Place = require("../models/Place");
+const { getCityCollection } = require("../utils/cityCollection");
 const { ApiError } = require("../middleware/error");
 
 async function activity(req, res) {
@@ -14,8 +14,14 @@ async function activity(req, res) {
 
 async function validatePlace(placeId) {
   if (placeId) {
-    const place = await Place.findOne({ id: placeId });
-    if (!place) throw new ApiError(404, "Place not found");
+    const cities = await City.find({}).select("id collectionName").lean();
+    const matches = await Promise.all(
+      cities.map(async (city) => {
+        const collection = await getCityCollection(city.id);
+        return collection.findOne({ id: placeId, docType: "place" });
+      })
+    );
+    if (!matches.some(Boolean)) throw new ApiError(404, "Place not found");
   }
 }
 

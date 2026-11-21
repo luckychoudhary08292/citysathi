@@ -8,15 +8,9 @@ const citySchema = new mongoose.Schema(
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
     heroImageUrl: { type: String, required: true },
-    collectionName: {
-      type: String,
-      required: true,
-      default() {
-        return `${this.id}_places`;
-      },
-    },
+    collectionName: { type: String, required: true, unique: true },
   },
-  { timestamps: true, versionKey: false }
+  { timestamps: true, versionKey: false, collection: "cities" }
 );
 
 module.exports = mongoose.model("City", citySchema);

@@ -1,7 +1,6 @@
 const City = require("../models/City");
-const Place = require("../models/Place");
-const PromoBanner = require("../models/PromoBanner");
-const CityService = require("../models/CityService");
+const Category = require("../models/Category");
+const { getCityCollection } = require("../utils/cityCollection");
 const { ApiError } = require("../middleware/error");
 
 function placeJson(place) {
@@ -14,8 +13,8 @@ function placeJson(place) {
     rating: place.rating,
     reviewCountLabel: place.reviewCountLabel,
     distanceLabel: place.distanceLabel,
-    tags: place.tags,
-    subCategories: place.subCategories,
+    tags: place.tags || [],
+    subCategories: place.subCategories || [],
     description: place.description,
     openHours: place.openHours,
     phone: place.phone,
@@ -44,7 +43,7 @@ function serviceJson(service) {
 
 async function listCities(_req, res, next) {
   try {
-    const cities = await City.find({}).sort({ name: 1 });
+    const cities = await City.find({}).sort({ name: 1 }).lean();
     res.status(200).json(
       cities.map((city) => ({
         id: city.id,
@@ -53,7 +52,7 @@ async function listCities(_req, res, next) {
         latitude: city.latitude,
         longitude: city.longitude,
         heroImageUrl: city.heroImageUrl,
-        collectionName: city.collectionName || `${city.id}_places`,
+        collectionName: city.collectionName || `city_${city.id}`,
       }))
     );
   } catch (error) {
@@ -63,71 +62,85 @@ async function listCities(_req, res, next) {
 
 async function cityHome(req, res, next) {
   try {
-    const city = await City.findOne({ id: req.params.cityId });
-    if (!city) throw new ApiError(404, "City not found");
-
-    const [popularPlaces, promo] = await Promise.all([
-      Place.find({ cityId: city.id, isPopular: true }).sort({ rating: -1 }),
-      PromoBanner.findOne({ cityId: city.id }),
+    const collection = await getCityCollection(req.params.cityId);
+    const [home, popularPlaces] = await Promise.all([
+      collection.findOne({ id: "home_meta", docType: "home_meta" }),
+      collection
+        .find({ docType: "place", cityId: req.params.cityId, isPopular: true })
+        .sort({ rating: -1 })
+        .toArray(),
     ]);
 
+    if (!home) throw new ApiError(404, "City home not found");
     res.status(200).json({
-      cityId: city.id,
-      cityName: city.name,
-      heroSubtitle: `Unforgettable journeys in ${city.name},\ncreated for you.`,
-      headerImageUrl: city.heroImageUrl,
+      cityId: home.cityId,
+      cityName: home.cityName,
+      heroSubtitle: home.heroSubtitle,
+      headerImageUrl: home.headerImageUrl,
       popularPlaces: popularPlaces.map(placeJson),
-      promoBanner: promo
-        ? {
-            id: promo.id,
-            badgeText: promo.badgeText,
-            title: promo.title,
-            subtitle: promo.subtitle,
-            ctaLabel: promo.ctaLabel,
-            imageUrl: promo.imageUrl,
-            targetRoute: promo.targetRoute,
-          }
-        : null,
+      promoBanner: home.promoBanner,
     });
   } catch (error) {
     next(error);
   }
 }
 
+async function categories(_req, res, next) {
+  try {
+    const filter = {};
+    if (_req.query.cityId) filter.cityId = _req.query.cityId;
+    if (_req.query.category) filter.category = _req.query.category;
+    const docs = await Category.find(filter).sort({ cityId: 1, category: 1 }).lean();
+    res.status(200).json(
+      docs.map((doc) => ({
+        id: doc.id,
+        cityId: doc.cityId,
+        category: doc.category,
+        title: doc.title,
+        subCategories: doc.subCategories,
+      }))
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+function escapedRegex(value) {
+  return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+}
+
 async function explore(req, res, next) {
   try {
-    const city = await City.findOne({ id: req.params.cityId });
-    if (!city) throw new ApiError(404, "City not found");
-
+    const { cityId } = req.params;
     const { category, subCategory, q } = req.query;
-    const filter = { cityId: city.id };
-    if (category) filter.category = category;
+    const collection = await getCityCollection(cityId);
+    const categoryFilter = { cityId };
+    if (category) categoryFilter.category = category;
 
-    const andFilters = [];
+    const categoryDocs = await Category.find(categoryFilter).select("subCategories").lean();
+    const subCategories = [...new Set(categoryDocs.flatMap((doc) => doc.subCategories || []))]
+      .sort((a, b) => a.localeCompare(b));
+
+    const filters = [{ docType: "place", cityId }];
+    if (category) filters.push({ category });
     if (subCategory) {
-      const escaped = subCategory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(escaped, "i");
-      andFilters.push({ $or: [{ subCategories: regex }, { tags: regex }] });
+      const regex = escapedRegex(subCategory);
+      filters.push({ $or: [{ subCategories: regex }, { tags: regex }] });
     }
     if (q) {
-      const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(escaped, "i");
-      andFilters.push({
+      const regex = escapedRegex(q);
+      filters.push({
         $or: [{ name: regex }, { subtitle: regex }, { tags: regex }, { subCategories: regex }],
       });
     }
-    if (andFilters.length) filter.$and = andFilters;
 
-    const places = await Place.find(filter).sort({ rating: -1, name: 1 });
-    const subCategoryFilter = { cityId: city.id };
-    if (category) subCategoryFilter.category = category;
-    const categoryPlaces = await Place.find(subCategoryFilter).select("subCategories");
-    const subCategories = [
-      ...new Set(categoryPlaces.flatMap((place) => place.subCategories || [])),
-    ].sort((a, b) => a.localeCompare(b));
+    const places = await collection
+      .find(filters.length === 1 ? filters[0] : { $and: filters })
+      .sort({ rating: -1, name: 1 })
+      .toArray();
 
     res.status(200).json({
-      cityId: city.id,
+      cityId,
       category: category || null,
       subCategories,
       places: places.map(placeJson),
@@ -138,42 +151,43 @@ async function explore(req, res, next) {
 }
 
 const mapFilters = {
-  ATM: { placeCategories: ["ATM"], serviceGroups: [] },
-  HOSPITALS: { placeCategories: ["HOSPITAL"], serviceGroups: [] },
-  PHARMACY: { placeCategories: ["PHARMACY"], serviceGroups: ["PHARMACY"] },
-  FOOD: { placeCategories: ["FOOD"], serviceGroups: [] },
-  TRANSPORT: { placeCategories: ["TRANSPORT"], serviceGroups: ["TRANSPORT"] },
-  EMERGENCY: { placeCategories: ["EMERGENCY"], serviceGroups: ["EMERGENCY"] },
-  PLACES: { placeCategories: null, serviceGroups: [] },
+  ATM: { categories: ["ATM"], groups: [] },
+  HOSPITALS: { categories: ["HOSPITAL"], groups: [] },
+  PHARMACY: { categories: ["PHARMACY"], groups: ["PHARMACY"] },
+  FOOD: { categories: ["FOOD"], groups: [] },
+  TRANSPORT: { categories: ["TRANSPORT"], groups: ["TRANSPORT"] },
+  EMERGENCY: { categories: ["EMERGENCY"], groups: ["EMERGENCY"] },
+  PLACES: { categories: null, groups: [] },
 };
 
 async function mapServices(req, res, next) {
   try {
-    const city = await City.findOne({ id: req.params.cityId });
-    if (!city) throw new ApiError(404, "City not found");
-
-    const filterName = req.query.filter;
-    const selected = filterName ? mapFilters[filterName.toUpperCase()] : null;
+    const { cityId } = req.params;
+    const collection = await getCityCollection(cityId);
+    const filterName = req.query.filter?.toUpperCase();
+    const selected = filterName ? mapFilters[filterName] : null;
     if (filterName && !selected) {
-      throw new ApiError(400, "filter must be ATM, HOSPITALS, PHARMACY, FOOD, TRANSPORT, EMERGENCY, or PLACES");
+      throw new ApiError(
+        400,
+        "filter must be ATM, HOSPITALS, PHARMACY, FOOD, TRANSPORT, EMERGENCY, or PLACES"
+      );
     }
 
-    const placeQuery = { cityId: city.id };
-    const serviceQuery = { cityId: city.id };
+    const placeFilter = { docType: "place", cityId };
+    const serviceFilter = { docType: "service", cityId };
     if (selected) {
-      if (selected.placeCategories) placeQuery.category = { $in: selected.placeCategories };
-      else if (filterName.toUpperCase() !== "PLACES") placeQuery.category = { $in: [] };
-      if (selected.serviceGroups.length) serviceQuery.group = { $in: selected.serviceGroups };
-      else serviceQuery.group = { $in: [] };
+      if (selected.categories) placeFilter.category = { $in: selected.categories };
+      if (selected.groups.length) serviceFilter.group = { $in: selected.groups };
+      else serviceFilter.group = { $in: [] };
     }
 
     const [places, services] = await Promise.all([
-      Place.find(placeQuery).sort({ name: 1 }),
-      CityService.find(serviceQuery).sort({ name: 1 }),
+      collection.find(placeFilter).sort({ name: 1 }).toArray(),
+      collection.find(serviceFilter).sort({ name: 1 }).toArray(),
     ]);
 
     res.status(200).json({
-      cityId: city.id,
+      cityId,
       places: places.map(placeJson),
       services: services.map(serviceJson),
     });
@@ -182,4 +196,4 @@ async function mapServices(req, res, next) {
   }
 }
 
-module.exports = { listCities, cityHome, explore, mapServices, placeJson, serviceJson };
+module.exports = { listCities, categories, cityHome, explore, mapServices, placeJson, serviceJson };

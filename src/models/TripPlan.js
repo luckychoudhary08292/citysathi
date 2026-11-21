@@ -3,7 +3,8 @@ const mongoose = require("mongoose");
 const tripPlanSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, trim: true, unique: true, index: true },
-    deviceId: { type: String, required: true, trim: true, index: true },
+    userId: { type: String, required: true, trim: true, index: true },
+    deviceId: { type: String, trim: true, default: "" },
     title: { type: String, required: true, trim: true },
     cityId: { type: String, required: true, trim: true },
     duration: { type: String, required: true, trim: true },
@@ -13,7 +14,7 @@ const tripPlanSchema = new mongoose.Schema(
     status: { type: String, enum: ["UPCOMING", "COMPLETED"], default: "UPCOMING" },
     createdAt: { type: Number, default: Date.now },
   },
-  { versionKey: false }
+  { versionKey: false, collection: "trips" }
 );
 
 module.exports = mongoose.model("TripPlan", tripPlanSchema);

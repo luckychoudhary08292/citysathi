@@ -7,6 +7,7 @@ const cityRoutes = require("./src/routes/cities");
 const userRoutes = require("./src/routes/user");
 const tripRoutes = require("./src/routes/trips");
 const placeRoutes = require("./src/routes/places");
+const categoryRoutes = require("./src/routes/categories");
 const { notFound, errorHandler } = require("./src/middleware/error");
 
 const app = express();
@@ -36,6 +37,7 @@ app.use(
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/cities", cityRoutes);
+app.use("/api/v1/categories", categoryRoutes);
 app.use("/api/v1/user", userRoutes);
 app.use("/api/v1/trips", tripRoutes);
 app.use("/api/v1/places", placeRoutes);

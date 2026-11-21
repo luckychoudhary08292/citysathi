@@ -26,6 +26,8 @@ router.post(
     parse: ({ body }) => ({
       body: z.object({
         id: z.string().trim().min(1),
+        userId: z.string().trim().min(1).optional(),
+        deviceId: z.string().trim().optional(),
         title: tripFields.title,
         cityId: tripFields.cityId,
         duration: tripFields.duration,

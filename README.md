@@ -1,6 +1,14 @@
 # City Companion API
 
-Production-ready Node.js, Express, Mongoose REST API for the City Companion Android app.
+Node.js, Express, and MongoDB REST API for the City Companion Android app.
+
+## MongoDB layout
+
+- `cities`: city selector metadata and each city's personal collection name.
+- `city_<cityId>`: that city's `home_meta`, `place`, and `service` documents.
+- `categories`: fixed parent categories and city-specific sub-category filters.
+- `trips`: user-scoped trip plans and checkpoints.
+- `tips`: place tips and ratings.
 
 ## Requirements
 
@@ -57,13 +65,15 @@ City home and explore:
 curl http://localhost:5000/api/v1/cities/indore/home
 curl "http://localhost:5000/api/v1/cities/indore/explore?category=HERITAGE&subCategory=Historic&q=palace"
 curl "http://localhost:5000/api/v1/cities/indore/map-services?filter=PHARMACY"
+curl "http://localhost:5000/api/v1/categories?cityId=indore&category=HERITAGE"
 ```
 
-Trips are scoped to the `X-Device-Id` header (or `default_device` when omitted):
+Trips are scoped to `X-User-Id`, then `X-Device-Id`, then a body `userId`, and finally `default_user`:
 
 ```bash
-curl http://localhost:5000/api/v1/trips -H "X-Device-Id: android-device-123"
+curl http://localhost:5000/api/v1/trips -H "X-User-Id: android-user-123"
 curl -X POST http://localhost:5000/api/v1/trips \
+  -H "X-User-Id: android-user-123" \
   -H "X-Device-Id: android-device-123" \
   -H "Content-Type: application/json" \
   -d '{"id":"weekend-indore","title":"Indore Weekend","cityId":"indore","duration":"2 days","placeIds":["rajwada_palace_indore"],"startDateMillis":1797724800000,"completedPlaceIds":[],"status":"UPCOMING"}'
@@ -78,7 +88,7 @@ curl -X POST http://localhost:5000/api/v1/places/rajwada_palace_indore/tips \
   -d '{"id":"tip-1","placeName":"Rajwada Palace","note":"Visit early to avoid the queues.","rating":4.5,"timestamp":1797724800000}'
 ```
 
-On startup, the service idempotently seeds cities, places, banners, and city services only when the Cities collection is empty. `npm run seed` runs the same initializer explicitly and does not erase existing data.
+On startup, the service idempotently inserts missing city, category, home, place, and service documents into the city-wise collections. It does not delete or overwrite existing documents or user trips. `npm run seed` runs the same initializer explicitly.
 
 Protected activity (replace the token):
 
