@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const mongoose = require("mongoose");
 const app = require("./app");
+const { seedDatabaseIfEmpty } = require("./src/seed/seed");
 
 const port = Number(process.env.PORT) || 5000;
 
@@ -11,6 +12,7 @@ async function start() {
 
   await mongoose.connect(process.env.MONGODB_URI);
   console.log("MongoDB connected");
+  await seedDatabaseIfEmpty();
 
   const server = app.listen(port, () => {
     console.log(`City Companion API listening on port ${port}`);

@@ -11,9 +11,10 @@ function notFound(req, res) {
 
 function errorHandler(error, _req, res, _next) {
   if (error.name === "ZodError") {
+    const issues = error.issues || error.errors || [];
     return res.status(400).json({
       error: "Validation failed",
-      details: error.errors.map((item) => ({ field: item.path.join("."), message: item.message })),
+      details: issues.map((item) => ({ field: item.path.join("."), message: item.message })),
     });
   }
   if (error.name === "ValidationError") {

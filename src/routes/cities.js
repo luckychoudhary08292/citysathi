@@ -2,7 +2,7 @@ const express = require("express");
 const { z } = require("zod");
 const validate = require("../middleware/validate");
 const { CATEGORY_VALUES } = require("../config/constants");
-const { listCities, cityHome, explore } = require("../controllers/cityController");
+const { listCities, cityHome, explore, mapServices } = require("../controllers/cityController");
 
 const router = express.Router();
 
@@ -32,6 +32,16 @@ router.get(
     }),
   }),
   explore
+);
+router.get(
+  "/:cityId/map-services",
+  validate({
+    parse: ({ params, query }) => ({
+      params: z.object({ cityId: z.string().trim().min(1) }).parse(params),
+      query: z.object({ filter: z.string().trim().min(1).optional() }).passthrough().parse(query),
+    }),
+  }),
+  mapServices
 );
 
 module.exports = router;

@@ -7,6 +7,11 @@ const CATEGORY_VALUES = [
   "CULTURE",
   "HOSPITAL",
   "ATM",
+  "PHARMACY",
+  "TRANSPORT",
+  "EMERGENCY",
 ];
 
-module.exports = { CATEGORY_VALUES };
+const SERVICE_GROUPS = ["TRANSPORT", "COLLEGES", "PHARMACY", "EMERGENCY"];
+
+module.exports = { CATEGORY_VALUES, SERVICE_GROUPS };

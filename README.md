@@ -56,7 +56,29 @@ City home and explore:
 ```bash
 curl http://localhost:5000/api/v1/cities/indore/home
 curl "http://localhost:5000/api/v1/cities/indore/explore?category=HERITAGE&subCategory=Historic&q=palace"
+curl "http://localhost:5000/api/v1/cities/indore/map-services?filter=PHARMACY"
 ```
+
+Trips are scoped to the `X-Device-Id` header (or `default_device` when omitted):
+
+```bash
+curl http://localhost:5000/api/v1/trips -H "X-Device-Id: android-device-123"
+curl -X POST http://localhost:5000/api/v1/trips \
+  -H "X-Device-Id: android-device-123" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"weekend-indore","title":"Indore Weekend","cityId":"indore","duration":"2 days","placeIds":["rajwada_palace_indore"],"startDateMillis":1797724800000,"completedPlaceIds":[],"status":"UPCOMING"}'
+```
+
+Place tips:
+
+```bash
+curl http://localhost:5000/api/v1/places/rajwada_palace_indore/tips
+curl -X POST http://localhost:5000/api/v1/places/rajwada_palace_indore/tips \
+  -H "Content-Type: application/json" \
+  -d '{"id":"tip-1","placeName":"Rajwada Palace","note":"Visit early to avoid the queues.","rating":4.5,"timestamp":1797724800000}'
+```
+
+On startup, the service idempotently seeds cities, places, banners, and city services only when the Cities collection is empty. `npm run seed` runs the same initializer explicitly and does not erase existing data.
 
 Protected activity (replace the token):
 
