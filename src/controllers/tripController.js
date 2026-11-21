@@ -4,6 +4,7 @@ const { ApiError } = require("../middleware/error");
 function userIdFrom(req) {
   return (
     req.get("X-User-Id") ||
+    req.authUserId ||
     req.get("X-Device-Id") ||
     (req.body && req.body.userId) ||
     "default_user"

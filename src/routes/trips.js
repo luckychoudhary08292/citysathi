@@ -1,9 +1,11 @@
 const express = require("express");
 const { z } = require("zod");
 const validate = require("../middleware/validate");
+const optionalAccountAuth = require("../middleware/optionalAccountAuth");
 const { listTrips, upsertTrip, patchTrip, deleteTrip } = require("../controllers/tripController");
 
 const router = express.Router();
+router.use(optionalAccountAuth);
 const tripFields = {
   title: z.string().trim().min(1).max(150),
   cityId: z.string().trim().min(1),

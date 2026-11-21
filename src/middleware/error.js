@@ -6,29 +6,32 @@ class ApiError extends Error {
 }
 
 function notFound(req, res) {
-  res.status(404).json({ error: "Route not found" });
+  res.status(404).json({ message: "Route not found" });
 }
 
 function errorHandler(error, _req, res, _next) {
   if (error.name === "ZodError") {
     const issues = error.issues || error.errors || [];
-    return res.status(400).json({
-      error: "Validation failed",
-      details: issues.map((item) => ({ field: item.path.join("."), message: item.message })),
-    });
+    const message = issues.length
+      ? issues.map((item) => item.message).join(" ")
+      : "Validation failed";
+    return res.status(400).json({ message });
   }
   if (error.name === "ValidationError") {
-    return res.status(400).json({ error: error.message });
+    return res.status(400).json({ message: error.message });
   }
   if (error.code === 11000) {
-    return res.status(409).json({ error: "Duplicate value" });
+    return res.status(409).json({ message: "An account with this username or email already exists." });
   }
   if (error.message === "Origin is not allowed by CORS") {
-    return res.status(403).json({ error: error.message });
+    return res.status(403).json({ message: error.message });
   }
-  console.error(error);
+  if (error.type === "entity.parse.failed") {
+    return res.status(400).json({ message: "Request body must contain valid JSON." });
+  }
+  if (!error.statusCode || error.statusCode >= 500) console.error(error);
   res.status(error.statusCode || 500).json({
-    error: error.statusCode ? error.message : "Internal server error",
+    message: error.statusCode ? error.message : "Internal server error",
   });
 }
 

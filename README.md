@@ -9,6 +9,7 @@ Node.js, Express, and MongoDB REST API for the City Companion Android app.
 - `categories`: fixed parent categories and city-specific sub-category filters.
 - `trips`: user-scoped trip plans and checkpoints.
 - `tips`: place tips and ratings.
+- `users`: Android username/email accounts and password reset tokens.
 
 ## Requirements
 
@@ -36,6 +37,24 @@ curl http://localhost:5000/health
 ```
 
 ## API examples
+
+Android account signup and signin:
+
+```bash
+curl -X POST http://localhost:5000/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"username":"Lucky","email":"lucky@email.com","password":"StrongPass123"}'
+
+curl -X POST http://localhost:5000/api/v1/auth/signin \
+  -H "Content-Type: application/json" \
+  -d '{"identifier":"Lucky","password":"StrongPass123"}'
+
+curl -X POST http://localhost:5000/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"lucky@email.com"}'
+```
+
+Password reset tokens are stored with a one-hour expiry. The forgot-password response never reveals whether an email is registered, and reset tokens are never returned by the API.
 
 Register:
 
