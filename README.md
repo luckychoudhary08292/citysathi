@@ -23,12 +23,13 @@ npm install
 cp .env.example .env
 ```
 
-Set `MONGODB_URI` and `JWT_SECRET` in `.env`. Start MongoDB and run:
+Set `MONGODB_URI` and `JWT_SECRET` in `.env`, then run:
 
 ```bash
-npm run seed
 npm run dev
 ```
+
+The backend does not seed or auto-create application data at startup. City, place, category, home, and service records must be managed through your admin tooling or inserted separately. API reads query MongoDB directly. Starting or restarting the backend does not insert or delete application documents.
 
 The server listens on `PORT` (default `5000`). Health check:
 
@@ -107,8 +108,6 @@ curl -X POST http://localhost:5000/api/v1/places/rajwada_palace_indore/tips \
   -d '{"id":"tip-1","placeName":"Rajwada Palace","note":"Visit early to avoid the queues.","rating":4.5,"timestamp":1797724800000}'
 ```
 
-On startup, the service idempotently inserts missing city, category, home, place, and service documents into the city-wise collections. It does not delete or overwrite existing documents or user trips. `npm run seed` runs the same initializer explicitly.
-
 ## Real-time updates
 
 The HTTP server also serves Socket.IO at `/socket.io`. Android clients may connect using polling or WebSocket, optionally with `cityId` in the handshake query. Clients can emit `join_city` with `{ "cityId": "indore" }` and `leave_city` with the same shape. Updates arrive as `data_updated` events containing `type`, `cityId`, `scope`, and `timestamp`.
@@ -160,7 +159,7 @@ curl -X PATCH http://localhost:5000/api/v1/user/preferences \
 
 ## Deployment
 
-Set `MONGODB_URI`, `JWT_SECRET`, `ALLOWED_ORIGINS` (optional comma-separated list), and `PORT` as environment variables. Run `npm run seed` once against the production database if needed.
+Set `MONGODB_URI`, `JWT_SECRET`, `ALLOWED_ORIGINS` (optional comma-separated list), and `PORT` as environment variables. Ensure the required city and category data is provisioned by your admin/data-management process; application startup does not seed it.
 
 Docker:
 

@@ -3,7 +3,6 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const http = require("http");
 const app = require("./app");
-const { seedDatabaseIfEmpty } = require("./src/seed/seed");
 const {
   initSocketServer,
   startChangeStreamWatcher,
@@ -18,7 +17,6 @@ async function start() {
 
   await mongoose.connect(process.env.MONGODB_URI);
   console.log("MongoDB connected");
-  await seedDatabaseIfEmpty();
 
   const httpServer = http.createServer(app);
   initSocketServer(httpServer);
