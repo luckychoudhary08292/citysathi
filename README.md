@@ -109,6 +109,21 @@ curl -X POST http://localhost:5000/api/v1/places/rajwada_palace_indore/tips \
 
 On startup, the service idempotently inserts missing city, category, home, place, and service documents into the city-wise collections. It does not delete or overwrite existing documents or user trips. `npm run seed` runs the same initializer explicitly.
 
+## Real-time updates
+
+The HTTP server also serves Socket.IO at `/socket.io`. Android clients may connect using polling or WebSocket, optionally with `cityId` in the handshake query. Clients can emit `join_city` with `{ "cityId": "indore" }` and `leave_city` with the same shape. Updates arrive as `data_updated` events containing `type`, `cityId`, `scope`, and `timestamp`.
+
+When MongoDB supports change streams, updates are broadcast automatically from database changes. On standalone MongoDB, an admin service can notify connected clients with:
+
+```bash
+curl -X POST http://localhost:5000/api/v1/internal/notify-change \
+  -H "Content-Type: application/json" \
+  -H "X-Internal-Secret: YOUR_INTERNAL_NOTIFY_SECRET" \
+  -d '{"cityId":"indore","scope":"places"}'
+```
+
+Set `INTERNAL_SYNC_SECRET` in the server environment to require the matching header. The legacy `INTERNAL_NOTIFY_SECRET` is also accepted. If neither is set, the webhook does not require the header.
+
 Protected activity (replace the token):
 
 ```bash

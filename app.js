@@ -8,9 +8,21 @@ const userRoutes = require("./src/routes/user");
 const tripRoutes = require("./src/routes/trips");
 const placeRoutes = require("./src/routes/places");
 const categoryRoutes = require("./src/routes/categories");
+const internalRoutes = require("./src/routes/internal");
 const { notFound, errorHandler } = require("./src/middleware/error");
 
 const app = express();
+
+function preventApiGetCaching(req, res, next) {
+  if (req.method === "GET") {
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+  }
+  next();
+}
 
 app.set("trust proxy", 1);
 app.use(helmet());
@@ -35,9 +47,11 @@ app.use(
 );
 
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+app.use("/api/v1", preventApiGetCaching);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/cities", cityRoutes);
 app.use("/api/v1/categories", categoryRoutes);
+app.use("/api/v1/internal", internalRoutes);
 app.use("/api/v1/user", userRoutes);
 app.use("/api/v1/trips", tripRoutes);
 app.use("/api/v1/places", placeRoutes);

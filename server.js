@@ -1,8 +1,14 @@
 require("dotenv").config();
 
 const mongoose = require("mongoose");
+const http = require("http");
 const app = require("./app");
 const { seedDatabaseIfEmpty } = require("./src/seed/seed");
+const {
+  initSocketServer,
+  startChangeStreamWatcher,
+  closeSocketServer,
+} = require("./src/services/liveUpdates");
 
 const port = Number(process.env.PORT) || 5000;
 
@@ -14,16 +20,27 @@ async function start() {
   console.log("MongoDB connected");
   await seedDatabaseIfEmpty();
 
-  const server = app.listen(port, () => {
+  const httpServer = http.createServer(app);
+  initSocketServer(httpServer);
+  const changeStream = startChangeStreamWatcher(mongoose.connection.db);
+
+  httpServer.listen(port, () => {
     console.log(`City Companion API listening on port ${port}`);
   });
 
+  let shuttingDown = false;
   const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log(`${signal} received, shutting down`);
-    server.close(async () => {
-      await mongoose.disconnect();
-      process.exit(0);
-    });
+    if (changeStream) {
+      await changeStream.close().catch((error) => {
+        console.error("Failed to close MongoDB change stream:", error.message);
+      });
+    }
+    await closeSocketServer();
+    await mongoose.disconnect();
+    process.exit(0);
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
