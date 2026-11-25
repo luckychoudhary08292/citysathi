@@ -19,7 +19,8 @@ async function start() {
   console.log("MongoDB connected");
 
   const httpServer = http.createServer(app);
-  initSocketServer(httpServer);
+  const io = initSocketServer(httpServer);
+  app.set("io", io);
   const changeStream = startChangeStreamWatcher(mongoose.connection.db);
 
   httpServer.listen(port, () => {

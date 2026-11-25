@@ -5,7 +5,7 @@ Node.js, Express, and MongoDB REST API for the City Companion Android app.
 ## MongoDB layout
 
 - `cities`: city selector metadata and each city's personal collection name.
-- `city_<cityId>`: that city's `home_meta`, `place`, and `service` documents.
+- `city_<cityId>`: that city's `home_meta`, `place`, `service`, and `app` documents.
 - `categories`: fixed parent categories and city-specific sub-category filters.
 - `trips`: user-scoped trip plans and checkpoints.
 - `tips`: place tips and ratings.
@@ -56,6 +56,30 @@ curl -X POST http://localhost:5000/api/v1/auth/forgot-password \
 ```
 
 Password reset tokens are stored with a one-hour expiry. The forgot-password response never reveals whether an email is registered, and reset tokens are never returned by the API.
+
+## Admin API
+
+Configure `ADMIN_USERNAME` and `ADMIN_PASSWORD` in the server environment, then sign in to receive a 12-hour admin JWT:
+
+```bash
+curl -X POST http://localhost:5000/api/v1/admin/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"change-this-password"}'
+```
+
+Send the token as `Authorization: Bearer <token>` for every `/api/v1/admin/*` endpoint. Optionally configure `ADMIN_API_KEY` and send `X-Admin-Key` for trusted server-side tools. Public signup cannot grant admin privileges.
+
+Admin CRUD endpoints:
+
+- `GET|POST /api/v1/admin/cities`; `PATCH|DELETE /api/v1/admin/cities/:cityId`
+- `GET|PUT /api/v1/admin/cities/:cityId/home`
+- `GET|POST /api/v1/admin/categories`; `PATCH|DELETE /api/v1/admin/categories/:id`
+- `GET|POST /api/v1/admin/places`; `PATCH|DELETE /api/v1/admin/places/:id`
+- `GET|POST /api/v1/admin/services`; `PATCH|DELETE /api/v1/admin/services/:id`
+- `GET|POST /api/v1/admin/apps`; `PATCH|DELETE /api/v1/admin/apps/:id`
+- `GET /api/v1/admin/tips`; `DELETE /api/v1/admin/tips/:id`
+
+Public city service endpoints are `GET /api/v1/cities/:cityId/services` and `GET /api/v1/cities/:cityId/apps`. Compatibility aliases are `GET /api/v1/services?cityId=...` and `GET /api/v1/apps?cityId=...`. Map-services returns `places`, `services`, `cityApps`, and `apps`.
 
 Register:
 
@@ -122,6 +146,8 @@ curl -X POST http://localhost:5000/api/v1/internal/notify-change \
 ```
 
 Set `INTERNAL_SYNC_SECRET` in the server environment to require the matching header. The legacy `INTERNAL_NOTIFY_SECRET` is also accepted. If neither is set, the webhook does not require the header.
+
+Successful `POST`, `PUT`, or `DELETE` requests to `/api/v1/places`, `/api/v1/places/:id`, or `/api/v1/cities/:cityId/places` emit a `data-updated` Socket.IO event with `type`, `cityId`, `scope: "places"`, `action`, and `timestamp`. City-targeted events go to that city's room and clients without a selected city.
 
 Protected activity (replace the token):
 

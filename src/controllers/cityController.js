@@ -6,39 +6,91 @@ const { ApiError } = require("../middleware/error");
 function placeJson(place) {
   return {
     id: place.id,
-    cityId: place.cityId,
+    cityId: place.cityId || "",
     name: place.name,
-    subtitle: place.subtitle,
-    category: place.category,
-    rating: place.rating,
-    reviewCountLabel: place.reviewCountLabel,
-    distanceLabel: place.distanceLabel,
+    subtitle: place.subtitle || "",
+    category: place.category || "HERITAGE",
+    rating: place.rating ?? 4.5,
+    reviewCountLabel: place.reviewCountLabel || "100+ Reviews",
+    distanceLabel: place.distanceLabel || "1.2 km",
     tags: place.tags || [],
     subCategories: place.subCategories || [],
-    description: place.description,
-    openHours: place.openHours,
-    phone: place.phone,
-    address: place.address,
-    latitude: place.latitude,
-    longitude: place.longitude,
-    imageUrl: place.imageUrl,
-    isPopular: place.isPopular,
-    isTrending: place.isTrending,
+    description: place.description || "",
+    openHours: place.openHours || "Open Daily",
+    phone: place.phone || "",
+    address: place.address || "",
+    latitude: place.latitude ?? 0,
+    longitude: place.longitude ?? 0,
+    imageUrl: place.imageUrl ?? null,
+    isPopular: place.isPopular ?? true,
+    isTrending: place.isTrending ?? false,
   };
 }
 
 function serviceJson(service) {
   return {
-    id: service.id,
-    cityId: service.cityId,
-    group: service.group,
-    name: service.name,
-    subtitle: service.subtitle,
-    distanceOrHours: service.distanceOrHours,
-    latitude: service.latitude,
-    longitude: service.longitude,
-    phone: service.phone,
+    id: service.id || "",
+    cityId: service.cityId || "",
+    name: service.name || "",
+    title: service.title || "",
+    highlightNumber: service.highlightNumber || "",
+    number: service.number || "",
+    badgeNumber: service.badgeNumber || "",
+    category: service.category || "",
+    group: service.group || "",
+    subtitle: service.subtitle || "",
+    description: service.description || "",
+    distanceOrHours: service.distanceOrHours || "",
+    phone: service.phone ?? null,
+    address: service.address || "",
+    iconKey: service.iconKey || "",
+    isUrgent: Boolean(service.isUrgent),
+    sortOrder: service.sortOrder || 0,
+    latitude: service.latitude || 0,
+    longitude: service.longitude || 0,
+    actionUrl: service.actionUrl ?? null,
   };
+}
+
+function appJson(app) {
+  return {
+    id: app.id || "",
+    cityId: app.cityId || "",
+    appName: app.appName || "",
+    name: app.name || "",
+    taskCategory: app.taskCategory || "",
+    task: app.task || "",
+    category: app.category || "",
+    description: app.description || "",
+    howToUse: app.howToUse || "",
+    highlightTag: app.highlightTag ?? null,
+    badge: app.badge ?? null,
+    iconUrl: app.iconUrl ?? null,
+    iconKey: app.iconKey || "",
+    playStoreUrl: app.playStoreUrl ?? null,
+    storeUrl: app.storeUrl ?? null,
+    packageName: app.packageName ?? null,
+    websiteUrl: app.websiteUrl ?? null,
+    sortOrder: app.sortOrder || 0,
+  };
+}
+
+function promoJson(promo) {
+  if (!promo) return null;
+  return {
+    id: promo.id || "promo_banner",
+    badgeText: promo.badgeText || "FEATURED",
+    title: promo.title || "",
+    subtitle: promo.subtitle || "",
+    ctaLabel: promo.ctaLabel || "Plan Trip",
+    imageUrl: promo.imageUrl ?? null,
+    targetRoute: promo.targetRoute || "plan_trip",
+  };
+}
+
+async function cityCollectionDocs(cityId, docType) {
+  const collection = await getCityCollection(cityId);
+  return collection.find({ cityId, docType }).sort({ sortOrder: 1, name: 1 }).toArray();
 }
 
 async function listCities(_req, res, next) {
@@ -73,12 +125,12 @@ async function cityHome(req, res, next) {
 
     if (!home) throw new ApiError(404, "City home not found");
     res.status(200).json({
-      cityId: home.cityId,
-      cityName: home.cityName,
-      heroSubtitle: home.heroSubtitle,
-      headerImageUrl: home.headerImageUrl,
+      cityId: home.cityId || req.params.cityId,
+      cityName: home.cityName || "",
+      heroSubtitle: home.heroSubtitle || "",
+      headerImageUrl: home.headerImageUrl ?? null,
       popularPlaces: popularPlaces.map(placeJson),
-      promoBanner: home.promoBanner,
+      promoBanner: promoJson(home.promoBanner),
     });
   } catch (error) {
     next(error);
@@ -130,7 +182,13 @@ async function explore(req, res, next) {
     if (q) {
       const regex = escapedRegex(q);
       filters.push({
-        $or: [{ name: regex }, { subtitle: regex }, { tags: regex }, { subCategories: regex }],
+        $or: [
+          { name: regex },
+          { subtitle: regex },
+          { description: regex },
+          { tags: regex },
+          { subCategories: regex },
+        ],
       });
     }
 
@@ -151,13 +209,13 @@ async function explore(req, res, next) {
 }
 
 const mapFilters = {
-  ATM: { categories: ["ATM"], groups: [] },
-  HOSPITALS: { categories: ["HOSPITAL"], groups: [] },
-  PHARMACY: { categories: ["PHARMACY"], groups: ["PHARMACY"] },
-  FOOD: { categories: ["FOOD"], groups: [] },
-  TRANSPORT: { categories: ["TRANSPORT"], groups: ["TRANSPORT"] },
-  EMERGENCY: { categories: ["EMERGENCY"], groups: ["EMERGENCY"] },
-  PLACES: { categories: null, groups: [] },
+  ATM: { categories: ["ATM"] },
+  HOSPITALS: { categories: ["HOSPITAL"] },
+  PHARMACY: { categories: ["PHARMACY"] },
+  FOOD: { categories: ["FOOD"] },
+  TRANSPORT: { categories: ["TRANSPORT"] },
+  EMERGENCY: { categories: ["EMERGENCY"] },
+  PLACES: { categories: null },
 };
 
 async function mapServices(req, res, next) {
@@ -173,27 +231,59 @@ async function mapServices(req, res, next) {
       );
     }
 
-    const placeFilter = { docType: "place", cityId };
-    const serviceFilter = { docType: "service", cityId };
-    if (selected) {
-      if (selected.categories) placeFilter.category = { $in: selected.categories };
-      if (selected.groups.length) serviceFilter.group = { $in: selected.groups };
-      else serviceFilter.group = { $in: [] };
-    }
-
-    const [places, services] = await Promise.all([
-      collection.find(placeFilter).sort({ name: 1 }).toArray(),
-      collection.find(serviceFilter).sort({ name: 1 }).toArray(),
+    const [allPlaces, allServices, apps] = await Promise.all([
+      collection.find({ docType: "place", cityId }).sort({ name: 1 }).toArray(),
+      collection.find({ docType: "service", cityId }).sort({ sortOrder: 1, name: 1 }).toArray(),
+      collection.find({ docType: "app", cityId }).sort({ sortOrder: 1, appName: 1 }).toArray(),
     ]);
+
+    const places = selected && selected.categories
+      ? allPlaces.filter((place) => selected.categories.includes(place.category))
+      : selected && filterName !== "PLACES" ? [] : allPlaces;
+    const serviceNeedle = filterName === "HOSPITALS" ? "HOSPITAL" : filterName;
+    const services = selected
+      ? allServices.filter((service) => {
+          if (!serviceNeedle || serviceNeedle === "PLACES") return false;
+          const values = [service.group, service.category, service.name, service.title]
+            .filter(Boolean)
+            .join(" ")
+            .toUpperCase();
+          return values.includes(serviceNeedle);
+        })
+      : allServices;
+    const cityApps = apps.map(appJson);
 
     res.status(200).json({
       cityId,
       places: places.map(placeJson),
       services: services.map(serviceJson),
+      cityApps,
+      apps: cityApps,
     });
   } catch (error) {
     next(error);
   }
 }
 
-module.exports = { listCities, categories, cityHome, explore, mapServices, placeJson, serviceJson };
+async function listServices(req, res, next) {
+  try {
+    const docs = await cityCollectionDocs(req.params.cityId || req.query.cityId, "service");
+    res.status(200).json(docs.map(serviceJson));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function listApps(req, res, next) {
+  try {
+    const docs = await cityCollectionDocs(req.params.cityId || req.query.cityId, "app");
+    res.status(200).json(docs.map(appJson));
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = {
+  listCities, categories, cityHome, explore, mapServices, listServices, listApps,
+  placeJson, serviceJson, appJson, promoJson,
+};

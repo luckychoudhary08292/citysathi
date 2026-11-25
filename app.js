@@ -4,11 +4,14 @@ const cors = require("cors");
 
 const authRoutes = require("./src/routes/auth");
 const cityRoutes = require("./src/routes/cities");
+const cityResourceRoutes = require("./src/routes/cityResources");
 const userRoutes = require("./src/routes/user");
 const tripRoutes = require("./src/routes/trips");
 const placeRoutes = require("./src/routes/places");
 const categoryRoutes = require("./src/routes/categories");
 const internalRoutes = require("./src/routes/internal");
+const adminRoutes = require("./src/routes/admin");
+const { placeMutationEvents } = require("./src/middleware/placesEvents");
 const { notFound, errorHandler } = require("./src/middleware/error");
 
 const app = express();
@@ -48,8 +51,11 @@ app.use(
 
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
 app.use("/api/v1", preventApiGetCaching);
+app.use(placeMutationEvents);
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/cities", cityRoutes);
+app.use("/api/v1", cityResourceRoutes);
 app.use("/api/v1/categories", categoryRoutes);
 app.use("/api/v1/internal", internalRoutes);
 app.use("/api/v1/user", userRoutes);

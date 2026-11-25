@@ -21,7 +21,7 @@ function errorHandler(error, _req, res, _next) {
     return res.status(400).json({ message: error.message });
   }
   if (error.code === 11000) {
-    return res.status(409).json({ message: "An account with this username or email already exists." });
+    return res.status(409).json({ message: "A record with the provided identifier already exists." });
   }
   if (error.message === "Origin is not allowed by CORS") {
     return res.status(403).json({ message: error.message });

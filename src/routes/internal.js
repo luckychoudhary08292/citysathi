@@ -13,7 +13,10 @@ router.post(
       body: z.object({
         cityId: z.string().trim().optional().default(""),
         scope: z
-          .enum(["cities", "home", "places", "categories", "services", "trips", "all"])
+          .enum([
+            "cities", "home", "places", "categories", "subcategories", "explore",
+            "services", "apps", "city_apps", "trips", "all",
+          ])
           .optional()
           .default("all"),
       }).parse(body),

@@ -3,18 +3,28 @@ const { Server } = require("socket.io");
 let io;
 const recentEmits = new Map();
 const DEBOUNCE_MS = 150;
-const CITY_SCOPED_SCOPES = new Set(["home", "places", "categories", "services"]);
-const VALID_SCOPES = new Set([
-  "cities",
-  "home",
-  "places",
-  "categories",
-  "services",
-  "trips",
-  "all",
+const CITY_SCOPED_SCOPES = new Set([
+  "home", "places", "categories", "subcategories", "explore",
+  "services", "apps", "city_apps", "trips",
 ]);
+const VALID_SCOPES = new Set([
+  "cities", "home", "categories", "subcategories", "explore", "places",
+  "services", "apps", "city_apps", "trips", "all",
+]);
+const SCOPE_EVENTS = {
+  cities: ["cities-updated"],
+  home: ["home-updated"],
+  categories: ["categories-updated"],
+  subcategories: ["categories-updated"],
+  explore: ["categories-updated"],
+  places: ["places-updated"],
+  services: ["services-updated"],
+  apps: ["apps-updated"],
+  city_apps: ["apps-updated"],
+  trips: ["trips-updated"],
+};
 
-function emitLiveUpdate({ type = "DATA_UPDATED", cityId = "", scope = "all" } = {}) {
+function emitLiveUpdate({ type = "DATA_UPDATED", cityId = "", scope = "all", action } = {}) {
   if (!io) return;
   if (!VALID_SCOPES.has(scope)) scope = "all";
 
@@ -24,12 +34,18 @@ function emitLiveUpdate({ type = "DATA_UPDATED", cityId = "", scope = "all" } = 
   if (previous && now - previous < DEBOUNCE_MS) return;
   recentEmits.set(key, now);
 
-  const payload = { type, cityId, scope, timestamp: now };
-  if (cityId && CITY_SCOPED_SCOPES.has(scope)) {
+  const payload = { type, cityId, scope };
+  if (["POST", "PUT", "DELETE"].includes(action)) payload.action = action;
+  payload.timestamp = now;
+  const eventNames = [...new Set([...(SCOPE_EVENTS[scope] || []), "data-updated", "data_updated"])];
+  const emit = (operator) => {
+    for (const eventName of eventNames) operator.emit(eventName, payload);
+  };
+  if (cityId && cityId !== "all" && CITY_SCOPED_SCOPES.has(scope)) {
     const room = `city:${cityId}`;
-    io.to(room).to("city:none").emit("data_updated", payload);
+    emit(io.to(room).to("city:none"));
   } else {
-    io.emit("data_updated", payload);
+    emit(io);
   }
 }
 
@@ -87,7 +103,8 @@ function inferCityCollectionUpdate(change) {
   const scope =
     docType === "home_meta" ? "home" :
       docType === "service" ? "services" :
-        docType === "place" ? "places" : "all";
+          docType === "app" ? "apps" :
+            docType === "place" ? "places" : "all";
 
   return { cityId, scope };
 }

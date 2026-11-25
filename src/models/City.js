@@ -7,7 +7,7 @@ const citySchema = new mongoose.Schema(
     state: { type: String, required: true },
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
-    heroImageUrl: { type: String, required: true },
+    heroImageUrl: { type: String, default: null },
     collectionName: { type: String, required: true, unique: true },
   },
   { timestamps: true, versionKey: false, collection: "cities" }
