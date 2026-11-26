@@ -11,7 +11,7 @@ const tripPlanSchema = new mongoose.Schema(
     placeIds: { type: [String], default: [] },
     startDateMillis: { type: Number, required: true },
     completedPlaceIds: { type: [String], default: [] },
-    status: { type: String, enum: ["UPCOMING", "COMPLETED"], default: "UPCOMING" },
+    status: { type: String, enum: ["UPCOMING", "ONGOING", "COMPLETED"], default: "UPCOMING" },
     createdAt: { type: Number, default: Date.now },
   },
   { versionKey: false, collection: "trips" }

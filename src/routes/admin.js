@@ -79,10 +79,12 @@ const placeFields = {
   reviewCountLabel: z.string().optional().default("100+ Reviews"),
   distanceLabel: z.string().optional().default("1.2 km"),
   tags: z.array(z.string()).optional().default([]),
+  subCategory: z.string().optional().default(""),
   subCategories: z.array(z.string()).optional().default([]),
   description: z.string().optional().default(""),
   openHours: z.string().optional().default("Open Daily"),
   phone: z.string().optional().default(""),
+  contactNumber: z.string().optional().default(""),
   address: z.string().optional().default(""),
   latitude: z.number().finite().optional().default(0),
   longitude: z.number().finite().optional().default(0),
@@ -101,21 +103,29 @@ const placePatchBody = objectBody(z.object({
 const categoryFields = {
   cityId: z.string().trim().min(1),
   category: z.enum(FIXED_CATEGORIES),
+  name: z.string().trim().optional(),
   title: z.string().trim().min(1).optional().default("Places & Attractions"),
+  label: z.string().trim().optional(),
+  type: z.string().trim().optional(),
   subCategories: z.array(z.string().trim().min(1)).optional().default([]),
+  items: z.array(z.string().trim().min(1)).optional(),
 };
 const categoryCreateBody = objectBody(z.object({
   id: z.string().trim().min(1).optional(),
   ...categoryFields,
 }));
 const categoryPatchBody = objectBody(z.object({
+  name: z.string().trim().min(1).optional(),
   title: categoryFields.title.optional(),
+  label: z.string().trim().optional(),
+  type: z.string().trim().optional(),
   subCategories: categoryFields.subCategories.optional(),
+  items: categoryFields.items.optional(),
 }).refine((body) => Object.keys(body).length > 0, "Provide at least one category field."));
 
 const serviceStringFields = [
   "name", "title", "highlightNumber", "number", "badgeNumber", "category", "group",
-  "subtitle", "description", "distanceOrHours", "address", "iconKey",
+  "subtitle", "description", "distanceOrHours", "address", "iconKey", "contactNumber",
 ];
 const serviceFields = Object.fromEntries(serviceStringFields.map((key) => [
   key,
@@ -163,6 +173,21 @@ const appCreateBody = objectBody(z.object({
 const appPatchBody = objectBody(z.object({
   ...Object.fromEntries(Object.entries(appFields).map(([key, schema]) => [key, schema.optional()])),
 }).refine((body) => Object.keys(body).length > 0, "Provide at least one app field."));
+const mapCategoryCreateBody = objectBody(z.object({
+  id: z.string().trim().min(1).optional(),
+  cityId: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(80),
+  sortOrder: z.number().int().optional().default(0),
+}));
+const mapCategoryPatchBody = objectBody(z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  sortOrder: z.number().int().optional(),
+}).refine((body) => Object.keys(body).length > 0, "Provide a name or sortOrder."));
+const mapCategoryListQuery = validate({
+  parse: ({ query }) => ({
+    query: z.object({ cityId: z.string().trim().min(1) }).passthrough().parse(query),
+  }),
+});
 
 router.post("/auth/login", adminLoginBody, login);
 router.use(adminAuth);
@@ -170,6 +195,7 @@ router.use(adminAuth);
 router.get("/cities", asyncHandler(controller.listCities));
 router.post("/cities", cityCreateBody, asyncHandler(controller.createCity));
 router.patch("/cities/:cityId", cityParams, cityPatchBody, asyncHandler(controller.updateCity));
+router.put("/cities/:cityId", cityParams, cityPatchBody, asyncHandler(controller.updateCity));
 router.delete("/cities/:cityId", cityParams, asyncHandler(controller.deleteCity));
 
 router.get("/cities/:cityId/home", cityParams, asyncHandler(controller.getHome));
@@ -179,6 +205,11 @@ router.get("/categories", cityListQuery, asyncHandler(controller.listCategories)
 router.post("/categories", categoryCreateBody, asyncHandler(controller.createCategory));
 router.patch("/categories/:id", idParams, categoryPatchBody, asyncHandler(controller.updateCategory));
 router.delete("/categories/:id", idParams, asyncHandler(controller.deleteCategory));
+
+router.get("/map-categories", mapCategoryListQuery, asyncHandler(controller.listMapCategories));
+router.post("/map-categories", mapCategoryCreateBody, asyncHandler(controller.createMapCategory));
+router.patch("/map-categories/:id", idParams, mapCategoryPatchBody, asyncHandler(controller.updateMapCategory));
+router.delete("/map-categories/:id", idParams, asyncHandler(controller.deleteMapCategory));
 
 router.get("/places", cityListQuery, asyncHandler(controller.listPlaces));
 router.post("/places", placeCreateBody, asyncHandler(controller.createPlace));

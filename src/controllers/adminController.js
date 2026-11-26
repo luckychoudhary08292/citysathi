@@ -1,11 +1,15 @@
 const crypto = require("crypto");
 const City = require("../models/City");
 const Category = require("../models/Category");
+const MapCategory = require("../models/MapCategory");
 const Tip = require("../models/Tip");
 const { getCityCollection } = require("../utils/cityCollection");
 const { emitLiveUpdate } = require("../services/liveUpdates");
 const { ApiError } = require("../middleware/error");
-const { placeJson, serviceJson, appJson, promoJson } = require("./cityController");
+const {
+  placeJson, serviceJson, appJson, promoJson, categoryJson,
+} = require("./cityController");
+const { stringId, mongoId } = require("../utils/serialization");
 
 const { CATEGORY_VALUES } = require("../config/constants");
 
@@ -13,24 +17,26 @@ function generatedId(prefix) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
-function emit(req, scope, cityId = "", action) {
+function emit(req, scope, cityId = "", action, eventAliases = []) {
   emitLiveUpdate({
     type: "DATA_UPDATED",
     cityId,
     scope,
     action,
+    eventAliases,
   });
 }
 
 function cityJson(city) {
   return {
-    id: city.id,
-    name: city.name,
+    id: stringId(city),
+    _id: mongoId(city),
+    name: city.name || "",
     state: city.state || "",
     latitude: city.latitude ?? 22.7196,
     longitude: city.longitude ?? 75.8577,
     heroImageUrl: city.heroImageUrl ?? null,
-    collectionName: city.collectionName || `city_${city.id}`,
+    collectionName: city.collectionName || `city_${stringId(city)}`,
   };
 }
 
@@ -84,9 +90,11 @@ function normalizePlace(input, cityId, id) {
     distanceLabel: input.distanceLabel ?? "1.2 km",
     tags: input.tags ?? [],
     subCategories: input.subCategories ?? [],
+    subCategory: input.subCategory ?? "",
     description: input.description ?? "",
     openHours: input.openHours ?? "Open Daily",
     phone: input.phone ?? "",
+    contactNumber: input.contactNumber ?? input.phone ?? "",
     address: input.address ?? "",
     latitude: input.latitude ?? 0,
     longitude: input.longitude ?? 0,
@@ -111,7 +119,8 @@ function normalizeService(input, cityId, id) {
     subtitle: input.subtitle ?? "",
     description: input.description ?? "",
     distanceOrHours: input.distanceOrHours ?? "",
-    phone: input.phone ?? null,
+    phone: input.phone ?? input.contactNumber ?? null,
+    contactNumber: input.contactNumber ?? input.phone ?? input.number ?? "",
     address: input.address ?? "",
     iconKey: input.iconKey ?? "",
     isUrgent: input.isUrgent ?? false,
@@ -180,6 +189,7 @@ async function deleteCity(req, res) {
   await Promise.all([
     collection.deleteMany({ cityId: city.id }),
     Category.deleteMany({ cityId: city.id }),
+    MapCategory.deleteMany({ cityId: city.id }),
   ]);
   await City.deleteOne({ id: city.id });
   emit(req, "cities");
@@ -242,9 +252,7 @@ async function listCategories(req, res) {
   if (req.query.cityId) filter.cityId = req.query.cityId;
   if (req.query.category) filter.category = req.query.category;
   const docs = await Category.find(filter).sort({ cityId: 1, category: 1 }).lean();
-  res.status(200).json(docs.map(({ id, cityId, category, title, subCategories }) => ({
-    id, cityId, category, title, subCategories,
-  })));
+  res.status(200).json(docs.map(categoryJson));
 }
 
 async function createCategory(req, res) {
@@ -252,15 +260,14 @@ async function createCategory(req, res) {
   const category = await Category.create({
     ...req.body,
     id: req.body.id || `${req.body.cityId}_${req.body.category}`,
+    name: req.body.name || req.body.category,
+    title: req.body.title || req.body.name || req.body.category,
+    label: req.body.label || req.body.title || req.body.name || req.body.category,
+    type: req.body.type || "EXPLORE",
+    items: req.body.items || req.body.subCategories || [],
   });
   emit(req, "categories", category.cityId);
-  res.status(201).json({
-    id: category.id,
-    cityId: category.cityId,
-    category: category.category,
-    title: category.title,
-    subCategories: category.subCategories,
-  });
+  res.status(201).json(categoryJson(category));
 }
 
 async function updateCategory(req, res) {
@@ -271,19 +278,69 @@ async function updateCategory(req, res) {
   ).lean();
   if (!category) throw new ApiError(404, "Category not found.");
   emit(req, "categories", category.cityId);
-  res.status(200).json({
-    id: category.id,
-    cityId: category.cityId,
-    category: category.category,
-    title: category.title,
-    subCategories: category.subCategories,
-  });
+  res.status(200).json(categoryJson(category));
 }
 
 async function deleteCategory(req, res) {
   const category = await Category.findOneAndDelete({ id: req.params.id }).lean();
   if (!category) throw new ApiError(404, "Category not found.");
   emit(req, "categories", category.cityId);
+  res.status(204).end();
+}
+
+function mapCategoryJson(category) {
+  return {
+    id: stringId(category),
+    _id: mongoId(category),
+    cityId: category.cityId || "",
+    name: category.name || "",
+    sortOrder: category.sortOrder ?? 0,
+    type: "MAP",
+  };
+}
+
+async function listMapCategories(req, res) {
+  const categories = await MapCategory.find({ cityId: req.query.cityId })
+    .sort({ sortOrder: 1, name: 1 })
+    .lean();
+  res.status(200).json(categories.map(mapCategoryJson));
+}
+
+async function createMapCategory(req, res) {
+  await requireCity(req.body.cityId);
+  const name = req.body.name.trim();
+  const category = await MapCategory.create({
+    id: req.body.id || generatedId("mapcat"),
+    cityId: req.body.cityId,
+    name,
+    nameLower: name.toLocaleLowerCase(),
+    sortOrder: req.body.sortOrder ?? 0,
+    type: "MAP",
+  });
+  emit(req, "categories", category.cityId, undefined, ["map-categories-updated"]);
+  res.status(201).json(mapCategoryJson(category));
+}
+
+async function updateMapCategory(req, res) {
+  const patch = { ...req.body };
+  if (patch.name !== undefined) {
+    patch.name = patch.name.trim();
+    patch.nameLower = patch.name.toLocaleLowerCase();
+  }
+  const category = await MapCategory.findOneAndUpdate(
+    { id: req.params.id },
+    { $set: patch },
+    { new: true, runValidators: true }
+  ).lean();
+  if (!category) throw new ApiError(404, "Map sub-category not found.");
+  emit(req, "categories", category.cityId, undefined, ["map-categories-updated"]);
+  res.status(200).json(mapCategoryJson(category));
+}
+
+async function deleteMapCategory(req, res) {
+  const category = await MapCategory.findOneAndDelete({ id: req.params.id }).lean();
+  if (!category) throw new ApiError(404, "Map sub-category not found.");
+  emit(req, "categories", category.cityId, "DELETE", ["map-categories-updated"]);
   res.status(204).end();
 }
 
@@ -302,6 +359,7 @@ async function createPlace(req, res) {
   const collection = await getCityCollection(cityId);
   await collection.insertOne(doc);
   emit(req, "places", cityId, req.method);
+  if (doc.isPopular) emit(req, "home", cityId);
   res.status(201).json(placeJson(doc));
 }
 
@@ -323,6 +381,7 @@ async function updatePlace(req, res) {
   const doc = result.value || result;
   if (!doc) throw new ApiError(404, "Place not found.");
   emit(req, "places", found.city.id, req.method);
+  if (found.doc.isPopular || patch.isPopular === true) emit(req, "home", found.city.id);
   res.status(200).json(placeJson(doc));
 }
 
@@ -330,6 +389,7 @@ async function deletePlace(req, res) {
   const found = await findCityDoc("place", req.params.id, req.query.cityId);
   await found.collection.deleteOne({ id: req.params.id, docType: "place", cityId: found.city.id });
   emit(req, "places", found.city.id, req.method);
+  if (found.doc.isPopular) emit(req, "home", found.city.id);
   res.status(204).end();
 }
 
@@ -389,8 +449,14 @@ const deleteApp = (req, res) => deleteCityContent(req, res, "app", "apps");
 
 async function listTips(_req, res) {
   const tips = await Tip.find({}).sort({ timestamp: -1 }).lean();
-  res.status(200).json(tips.map(({ id, placeId, placeName, note, rating, timestamp }) => ({
-    id, placeId, placeName, note, rating, timestamp,
+  res.status(200).json(tips.map((tip) => ({
+    id: stringId(tip),
+    _id: mongoId(tip),
+    placeId: tip.placeId || "",
+    placeName: tip.placeName || "",
+    note: tip.note || "",
+    rating: tip.rating ?? 0,
+    timestamp: tip.timestamp ?? 0,
   })));
 }
 
@@ -412,6 +478,7 @@ module.exports = {
   listCities, createCity, updateCity, deleteCity,
   getHome, updateHome,
   listCategories, createCategory, updateCategory, deleteCategory,
+  listMapCategories, createMapCategory, updateMapCategory, deleteMapCategory,
   listPlaces, createPlace, updatePlace, deletePlace,
   listServices, createService, updateService, deleteService,
   listApps, createApp, updateApp, deleteApp,

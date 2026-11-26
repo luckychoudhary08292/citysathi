@@ -24,7 +24,13 @@ const SCOPE_EVENTS = {
   trips: ["trips-updated"],
 };
 
-function emitLiveUpdate({ type = "DATA_UPDATED", cityId = "", scope = "all", action } = {}) {
+function emitLiveUpdate({
+  type = "DATA_UPDATED",
+  cityId = "",
+  scope = "all",
+  action,
+  eventAliases = [],
+} = {}) {
   if (!io) return;
   if (!VALID_SCOPES.has(scope)) scope = "all";
 
@@ -37,7 +43,12 @@ function emitLiveUpdate({ type = "DATA_UPDATED", cityId = "", scope = "all", act
   const payload = { type, cityId, scope };
   if (["POST", "PUT", "DELETE"].includes(action)) payload.action = action;
   payload.timestamp = now;
-  const eventNames = [...new Set([...(SCOPE_EVENTS[scope] || []), "data-updated", "data_updated"])];
+  const eventNames = [...new Set([
+    ...(SCOPE_EVENTS[scope] || []),
+    ...eventAliases.filter((eventName) => typeof eventName === "string"),
+    "data-updated",
+    "data_updated",
+  ])];
   const emit = (operator) => {
     for (const eventName of eventNames) operator.emit(eventName, payload);
   };
@@ -143,6 +154,12 @@ function startChangeStreamWatcher(db) {
       emitLiveUpdate({ cityId: change.fullDocument?.cityId || "", scope: "categories" });
     } else if (collection === "trips") {
       emitLiveUpdate({ cityId: change.fullDocument?.cityId || "", scope: "trips" });
+    } else if (collection === "map_categories") {
+      emitLiveUpdate({
+        cityId: change.fullDocument?.cityId || "",
+        scope: "categories",
+        eventAliases: ["map-categories-updated"],
+      });
     } else {
       const update = inferCityCollectionUpdate(change);
       if (update) emitLiveUpdate(update);

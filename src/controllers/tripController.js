@@ -1,6 +1,7 @@
 const TripPlan = require("../models/TripPlan");
 const { ApiError } = require("../middleware/error");
 const { emitLiveUpdate } = require("../services/liveUpdates");
+const { stringId, stringArray } = require("../utils/serialization");
 
 function userIdFrom(req) {
   return (
@@ -18,15 +19,15 @@ function deviceIdFrom(req) {
 
 function tripJson(trip) {
   return {
-    id: trip.id,
+    id: stringId(trip),
     userId: trip.userId,
     deviceId: trip.deviceId,
     title: trip.title,
     cityId: trip.cityId,
     duration: trip.duration,
-    placeIds: trip.placeIds,
+    placeIds: stringArray(trip.placeIds),
     startDateMillis: trip.startDateMillis,
-    completedPlaceIds: trip.completedPlaceIds,
+    completedPlaceIds: stringArray(trip.completedPlaceIds),
     status: trip.status,
     createdAt: trip.createdAt,
   };

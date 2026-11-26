@@ -1,14 +1,22 @@
 const City = require("../models/City");
 const { getCityCollection } = require("../utils/cityCollection");
 const { ApiError } = require("../middleware/error");
+const { stringId, mongoId, stringArray } = require("../utils/serialization");
+
+function subdocumentJson(document, arrayFields = []) {
+  const value = typeof document.toObject === "function" ? document.toObject() : document;
+  const result = { ...value, id: stringId(document), _id: mongoId(document) };
+  for (const field of arrayFields) result[field] = stringArray(value[field]);
+  return result;
+}
 
 async function activity(req, res) {
   const user = req.user;
   res.status(200).json({
-    tripPlans: user.tripPlans,
-    savedPlaceIds: user.savedPlaceIds,
-    visitedPlaceIds: user.visitedPlaceIds,
-    contributions: user.contributions,
+    tripPlans: (user.tripPlans || []).map((plan) => subdocumentJson(plan, ["placeIds"])),
+    savedPlaceIds: stringArray(user.savedPlaceIds),
+    visitedPlaceIds: stringArray(user.visitedPlaceIds),
+    contributions: (user.contributions || []).map((item) => subdocumentJson(item)),
   });
 }
 
@@ -58,7 +66,7 @@ async function removeVisited(req, res) {
 async function createPlan(req, res) {
   req.user.tripPlans.push(req.body);
   await req.user.save();
-  res.status(201).json(req.user.tripPlans[req.user.tripPlans.length - 1]);
+  res.status(201).json(subdocumentJson(req.user.tripPlans[req.user.tripPlans.length - 1], ["placeIds"]));
 }
 
 async function updatePlan(req, res, next) {
@@ -67,7 +75,7 @@ async function updatePlan(req, res, next) {
     if (!plan) throw new ApiError(404, "Trip plan not found");
     Object.entries(req.body).forEach(([key, value]) => { plan[key] = value; });
     await req.user.save();
-    res.status(200).json(plan);
+    res.status(200).json(subdocumentJson(plan, ["placeIds"]));
   } catch (error) {
     next(error);
   }
@@ -90,7 +98,7 @@ async function addContribution(req, res, next) {
     await validatePlace(req.body.placeId);
     req.user.contributions.push(req.body);
     await req.user.save();
-    res.status(201).json(req.user.contributions[req.user.contributions.length - 1]);
+    res.status(201).json(subdocumentJson(req.user.contributions[req.user.contributions.length - 1]));
   } catch (error) {
     next(error);
   }

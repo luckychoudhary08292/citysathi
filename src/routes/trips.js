@@ -13,7 +13,7 @@ const tripFields = {
   placeIds: z.array(z.string().trim().min(1)),
   startDateMillis: z.number().finite(),
   completedPlaceIds: z.array(z.string().trim().min(1)),
-  status: z.enum(["UPCOMING", "COMPLETED"]),
+  status: z.enum(["UPCOMING", "ONGOING", "COMPLETED"]),
 };
 const params = validate({
   parse: ({ params: value }) => ({

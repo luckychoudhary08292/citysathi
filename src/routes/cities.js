@@ -46,6 +46,16 @@ router.get(
   mapServices
 );
 router.get(
+  "/:cityId/map",
+  validate({
+    parse: ({ params, query }) => ({
+      params: z.object({ cityId: z.string().trim().min(1) }).parse(params),
+      query: z.object({ filter: z.string().trim().min(1).optional() }).passthrough().parse(query),
+    }),
+  }),
+  mapServices
+);
+router.get(
   "/:cityId/services",
   validate({
     parse: ({ params }) => ({

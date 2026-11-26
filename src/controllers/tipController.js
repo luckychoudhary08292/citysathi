@@ -1,8 +1,10 @@
 const Tip = require("../models/Tip");
+const { stringId, mongoId } = require("../utils/serialization");
 
 function tipJson(tip) {
   return {
-    id: tip.id,
+    id: stringId(tip),
+    _id: mongoId(tip),
     placeId: tip.placeId,
     placeName: tip.placeName,
     note: tip.note,

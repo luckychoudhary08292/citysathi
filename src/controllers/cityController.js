@@ -1,47 +1,50 @@
 const City = require("../models/City");
 const Category = require("../models/Category");
+const MapCategory = require("../models/MapCategory");
 const { getCityCollection } = require("../utils/cityCollection");
 const { ApiError } = require("../middleware/error");
+const { stringId, mongoId, stringArray } = require("../utils/serialization");
 
-function placeJson(place) {
+function placeJson(place, cityId = place.cityId || "") {
   return {
-    id: place.id,
-    cityId: place.cityId || "",
-    name: place.name,
+    id: stringId(place),
+    _id: mongoId(place),
+    cityId,
+    name: place.name || "",
     subtitle: place.subtitle || "",
     category: place.category || "HERITAGE",
     rating: place.rating ?? 4.5,
     reviewCountLabel: place.reviewCountLabel || "100+ Reviews",
     distanceLabel: place.distanceLabel || "1.2 km",
-    tags: place.tags || [],
-    subCategories: place.subCategories || [],
+    tags: stringArray(place.tags),
     description: place.description || "",
     openHours: place.openHours || "Open Daily",
     phone: place.phone || "",
+    contactNumber: place.contactNumber || place.phone || "",
     address: place.address || "",
     latitude: place.latitude ?? 0,
     longitude: place.longitude ?? 0,
     imageUrl: place.imageUrl ?? null,
     isPopular: place.isPopular ?? true,
     isTrending: place.isTrending ?? false,
+    subCategory: place.subCategory || "",
+    subCategories: stringArray(place.subCategories),
   };
 }
 
-function serviceJson(service) {
+function serviceJson(service, cityId = service.cityId || "") {
   return {
-    id: service.id || "",
-    cityId: service.cityId || "",
+    id: stringId(service),
+    _id: mongoId(service),
+    cityId,
     name: service.name || "",
-    title: service.title || "",
     highlightNumber: service.highlightNumber || "",
-    number: service.number || "",
-    badgeNumber: service.badgeNumber || "",
     category: service.category || "",
-    group: service.group || "",
     subtitle: service.subtitle || "",
     description: service.description || "",
     distanceOrHours: service.distanceOrHours || "",
-    phone: service.phone ?? null,
+    phone: service.phone || service.contactNumber || service.number || null,
+    contactNumber: service.contactNumber || service.phone || service.number || "",
     address: service.address || "",
     iconKey: service.iconKey || "",
     isUrgent: Boolean(service.isUrgent),
@@ -49,36 +52,41 @@ function serviceJson(service) {
     latitude: service.latitude || 0,
     longitude: service.longitude || 0,
     actionUrl: service.actionUrl ?? null,
+    title: service.title || "",
+    number: service.number || "",
+    badgeNumber: service.badgeNumber || "",
+    group: service.group || "",
   };
 }
 
-function appJson(app) {
+function appJson(app, cityId = app.cityId || "") {
   return {
-    id: app.id || "",
-    cityId: app.cityId || "",
+    id: stringId(app),
+    _id: mongoId(app),
+    cityId,
     appName: app.appName || "",
-    name: app.name || "",
     taskCategory: app.taskCategory || "",
-    task: app.task || "",
-    category: app.category || "",
     description: app.description || "",
     howToUse: app.howToUse || "",
     highlightTag: app.highlightTag ?? null,
-    badge: app.badge ?? null,
     iconUrl: app.iconUrl ?? null,
     iconKey: app.iconKey || "",
     playStoreUrl: app.playStoreUrl ?? null,
-    storeUrl: app.storeUrl ?? null,
     packageName: app.packageName ?? null,
     websiteUrl: app.websiteUrl ?? null,
     sortOrder: app.sortOrder || 0,
+    name: app.name || "",
+    task: app.task || "",
+    category: app.category || "",
+    badge: app.badge ?? null,
+    storeUrl: app.storeUrl ?? null,
   };
 }
 
 function promoJson(promo) {
   if (!promo) return null;
   return {
-    id: promo.id || "promo_banner",
+    id: stringId(promo) || "promo_banner",
     badgeText: promo.badgeText || "FEATURED",
     title: promo.title || "",
     subtitle: promo.subtitle || "",
@@ -93,18 +101,38 @@ async function cityCollectionDocs(cityId, docType) {
   return collection.find({ cityId, docType }).sort({ sortOrder: 1, name: 1 }).toArray();
 }
 
+function categoryJson(doc) {
+  const subCategories = stringArray(doc.subCategories);
+  const id = stringId(doc);
+  const name = doc.name || doc.category || "";
+  const title = doc.title || name;
+  return {
+    id,
+    _id: mongoId(doc),
+    cityId: doc.cityId || "",
+    category: doc.category || "",
+    name,
+    title,
+    label: doc.label || title,
+    type: doc.type || "EXPLORE",
+    subCategories,
+    items: stringArray(doc.items).length ? stringArray(doc.items) : subCategories,
+  };
+}
+
 async function listCities(_req, res, next) {
   try {
     const cities = await City.find({}).sort({ name: 1 }).lean();
     res.status(200).json(
       cities.map((city) => ({
-        id: city.id,
-        name: city.name,
-        state: city.state,
-        latitude: city.latitude,
-        longitude: city.longitude,
-        heroImageUrl: city.heroImageUrl,
-        collectionName: city.collectionName || `city_${city.id}`,
+        id: stringId(city),
+        _id: mongoId(city),
+        name: city.name || "",
+        state: city.state || "",
+        latitude: city.latitude ?? 0,
+        longitude: city.longitude ?? 0,
+        heroImageUrl: city.heroImageUrl ?? null,
+        collectionName: city.collectionName || `city_${stringId(city)}`,
       }))
     );
   } catch (error) {
@@ -125,11 +153,11 @@ async function cityHome(req, res, next) {
 
     if (!home) throw new ApiError(404, "City home not found");
     res.status(200).json({
-      cityId: home.cityId || req.params.cityId,
+      cityId: req.params.cityId,
       cityName: home.cityName || "",
       heroSubtitle: home.heroSubtitle || "",
       headerImageUrl: home.headerImageUrl ?? null,
-      popularPlaces: popularPlaces.map(placeJson),
+      popularPlaces: popularPlaces.map((place) => placeJson(place, req.params.cityId)),
       promoBanner: promoJson(home.promoBanner),
     });
   } catch (error) {
@@ -145,11 +173,7 @@ async function categories(_req, res, next) {
     const docs = await Category.find(filter).sort({ cityId: 1, category: 1 }).lean();
     res.status(200).json(
       docs.map((doc) => ({
-        id: doc.id,
-        cityId: doc.cityId,
-        category: doc.category,
-        title: doc.title,
-        subCategories: doc.subCategories,
+        ...categoryJson(doc),
       }))
     );
   } catch (error) {
@@ -177,7 +201,13 @@ async function explore(req, res, next) {
     if (category) filters.push({ category });
     if (subCategory) {
       const regex = escapedRegex(subCategory);
-      filters.push({ $or: [{ subCategories: regex }, { tags: regex }] });
+      filters.push({
+        $or: [
+          { subCategory: regex },
+          { subCategories: regex },
+          { tags: regex },
+        ],
+      });
     }
     if (q) {
       const regex = escapedRegex(q);
@@ -201,62 +231,62 @@ async function explore(req, res, next) {
       cityId,
       category: category || null,
       subCategories,
-      places: places.map(placeJson),
+      places: places.map((place) => placeJson(place, cityId)),
     });
   } catch (error) {
     next(error);
   }
 }
 
-const mapFilters = {
-  ATM: { categories: ["ATM"] },
-  HOSPITALS: { categories: ["HOSPITAL"] },
-  PHARMACY: { categories: ["PHARMACY"] },
-  FOOD: { categories: ["FOOD"] },
-  TRANSPORT: { categories: ["TRANSPORT"] },
-  EMERGENCY: { categories: ["EMERGENCY"] },
-  PLACES: { categories: null },
-};
-
 async function mapServices(req, res, next) {
   try {
     const { cityId } = req.params;
     const collection = await getCityCollection(cityId);
-    const filterName = req.query.filter?.toUpperCase();
-    const selected = filterName ? mapFilters[filterName] : null;
-    if (filterName && !selected) {
-      throw new ApiError(
-        400,
-        "filter must be ATM, HOSPITALS, PHARMACY, FOOD, TRANSPORT, EMERGENCY, or PLACES"
-      );
-    }
+    const filterName = req.query.filter?.trim();
 
-    const [allPlaces, allServices, apps] = await Promise.all([
+    const [allPlaces, allServices, apps, mapCategories] = await Promise.all([
       collection.find({ docType: "place", cityId }).sort({ name: 1 }).toArray(),
       collection.find({ docType: "service", cityId }).sort({ sortOrder: 1, name: 1 }).toArray(),
       collection.find({ docType: "app", cityId }).sort({ sortOrder: 1, appName: 1 }).toArray(),
+      MapCategory.find({ cityId }).sort({ sortOrder: 1, name: 1 }).lean(),
     ]);
 
-    const places = selected && selected.categories
-      ? allPlaces.filter((place) => selected.categories.includes(place.category))
-      : selected && filterName !== "PLACES" ? [] : allPlaces;
-    const serviceNeedle = filterName === "HOSPITALS" ? "HOSPITAL" : filterName;
-    const services = selected
-      ? allServices.filter((service) => {
-          if (!serviceNeedle || serviceNeedle === "PLACES") return false;
-          const values = [service.group, service.category, service.name, service.title]
-            .filter(Boolean)
-            .join(" ")
-            .toUpperCase();
-          return values.includes(serviceNeedle);
-        })
-      : allServices;
-    const cityApps = apps.map(appJson);
+    const configuredMapSubCategories = mapCategories
+      .map((item) => item.name)
+      .filter((name) => typeof name === "string" && name.trim())
+      .map((name) => name.trim());
+    const mapSubCategories = configuredMapSubCategories.length
+      ? configuredMapSubCategories
+      : deriveMapSubCategories(allServices);
+    const filterNeedle = filterName && filterName.toUpperCase() === "HOSPITALS"
+      ? "HOSPITAL"
+      : filterName;
+    const matchesMapFilter = (values) => {
+      if (!filterNeedle || filterNeedle.toUpperCase() === "PLACES") return true;
+      const normalizedNeedle = filterNeedle.trim().toLocaleLowerCase();
+      return values.some((value) =>
+        typeof value === "string" && value.toLocaleLowerCase().includes(normalizedNeedle)
+      );
+    };
+    const places = !filterNeedle || filterNeedle.toUpperCase() === "PLACES"
+      ? allPlaces
+      : allPlaces.filter((place) => matchesMapFilter([
+          place.category, place.subCategory, ...stringArray(place.subCategories),
+          ...stringArray(place.tags), place.name, place.subtitle,
+        ]));
+    const services = !filterNeedle || filterNeedle.toUpperCase() === "PLACES"
+      ? (filterNeedle?.toUpperCase() === "PLACES" ? [] : allServices)
+      : allServices.filter((service) => matchesMapFilter([
+          service.category, service.group, service.name, service.title, service.subtitle,
+        ]));
+    const cityApps = apps.map((app) => appJson(app, cityId));
 
     res.status(200).json({
       cityId,
-      places: places.map(placeJson),
-      services: services.map(serviceJson),
+      mapsApiKey: getMapsApiKey(),
+      mapSubCategories,
+      places: places.map((place) => placeJson(place, cityId)),
+      services: services.map((service) => serviceJson(service, cityId)),
       cityApps,
       apps: cityApps,
     });
@@ -265,10 +295,31 @@ async function mapServices(req, res, next) {
   }
 }
 
+function deriveMapSubCategories(services) {
+  const names = new Map();
+  for (const service of services) {
+    for (const value of [service.category, service.group, service.name, service.title]) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      const name = value.trim();
+      if (!names.has(name.toLocaleLowerCase())) names.set(name.toLocaleLowerCase(), name);
+    }
+  }
+  return [...names.values()].sort((a, b) => a.localeCompare(b));
+}
+
+function getMapsApiKey() {
+  return process.env.MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+}
+
+async function mapConfig(_req, res) {
+  res.status(200).json({ mapsApiKey: getMapsApiKey(), defaultZoom: 13.5 });
+}
+
 async function listServices(req, res, next) {
   try {
-    const docs = await cityCollectionDocs(req.params.cityId || req.query.cityId, "service");
-    res.status(200).json(docs.map(serviceJson));
+    const cityId = req.params.cityId || req.query.cityId;
+    const docs = await cityCollectionDocs(cityId, "service");
+    res.status(200).json(docs.map((doc) => serviceJson(doc, cityId)));
   } catch (error) {
     next(error);
   }
@@ -276,14 +327,15 @@ async function listServices(req, res, next) {
 
 async function listApps(req, res, next) {
   try {
-    const docs = await cityCollectionDocs(req.params.cityId || req.query.cityId, "app");
-    res.status(200).json(docs.map(appJson));
+    const cityId = req.params.cityId || req.query.cityId;
+    const docs = await cityCollectionDocs(cityId, "app");
+    res.status(200).json(docs.map((doc) => appJson(doc, cityId)));
   } catch (error) {
     next(error);
   }
 }
 
 module.exports = {
-  listCities, categories, cityHome, explore, mapServices, listServices, listApps,
-  placeJson, serviceJson, appJson, promoJson,
+  listCities, categories, cityHome, explore, mapServices, listServices, listApps, mapConfig,
+  placeJson, serviceJson, appJson, promoJson, categoryJson,
 };

@@ -6,7 +6,7 @@ const { ApiError } = require("../middleware/error");
 
 function publicUser(user) {
   return {
-    userId: user.id,
+    userId: user.id || String(user._id),
     fullName: user.fullName,
     email: user.email,
     selectedCityId: user.selectedCityId,

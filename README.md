@@ -7,6 +7,7 @@ Node.js, Express, and MongoDB REST API for the City Companion Android app.
 - `cities`: city selector metadata and each city's personal collection name.
 - `city_<cityId>`: that city's `home_meta`, `place`, `service`, and `app` documents.
 - `categories`: fixed parent categories and city-specific sub-category filters.
+- `map_categories`: ordered, custom Map filter chips scoped to a city.
 - `trips`: user-scoped trip plans and checkpoints.
 - `tips`: place tips and ratings.
 - `users`: Android username/email accounts and password reset tokens.
@@ -71,15 +72,20 @@ Send the token as `Authorization: Bearer <token>` for every `/api/v1/admin/*` en
 
 Admin CRUD endpoints:
 
-- `GET|POST /api/v1/admin/cities`; `PATCH|DELETE /api/v1/admin/cities/:cityId`
+- `GET|POST /api/v1/admin/cities`; `PATCH|PUT|DELETE /api/v1/admin/cities/:cityId`
 - `GET|PUT /api/v1/admin/cities/:cityId/home`
 - `GET|POST /api/v1/admin/categories`; `PATCH|DELETE /api/v1/admin/categories/:id`
+- `GET|POST /api/v1/admin/map-categories?cityId=...`; `PATCH|DELETE /api/v1/admin/map-categories/:id`
 - `GET|POST /api/v1/admin/places`; `PATCH|DELETE /api/v1/admin/places/:id`
 - `GET|POST /api/v1/admin/services`; `PATCH|DELETE /api/v1/admin/services/:id`
 - `GET|POST /api/v1/admin/apps`; `PATCH|DELETE /api/v1/admin/apps/:id`
 - `GET /api/v1/admin/tips`; `DELETE /api/v1/admin/tips/:id`
 
-Public city service endpoints are `GET /api/v1/cities/:cityId/services` and `GET /api/v1/cities/:cityId/apps`. Compatibility aliases are `GET /api/v1/services?cityId=...` and `GET /api/v1/apps?cityId=...`. Map-services returns `places`, `services`, `cityApps`, and `apps`.
+Public city service endpoints are `GET /api/v1/cities/:cityId/services` and `GET /api/v1/cities/:cityId/apps`. Service `highlightNumber` is optional, so map-category services without a phone/number are accepted. Compatibility aliases are `GET /api/v1/services?cityId=...` and `GET /api/v1/apps?cityId=...`.
+
+The Map API is available at `GET /api/v1/cities/:cityId/map` and the compatible `GET /api/v1/cities/:cityId/map-services`, optionally with `?filter=<chip>`. Responses include `mapSubCategories`, `places`, `services`, and `cityApps` (`apps` is retained as a compatibility alias). Custom chips managed at `/api/v1/admin/map-categories` take precedence; if none exist for a city, chips are derived from that city's services. Map configuration is available at `GET /api/v1/map/config` and `GET /api/v1/config`; configure `MAPS_API_KEY` (or `GOOGLE_MAPS_API_KEY`) in the backend environment.
+
+Public API GET responses include no-cache headers. CORS allows requests without an Origin header and accepts both HTTP and HTTPS for configured hosts in `ALLOWED_ORIGINS`.
 
 Register:
 
