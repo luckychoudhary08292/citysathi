@@ -14,8 +14,9 @@ router.post(
         cityId: z.string().trim().optional().default(""),
         scope: z
           .enum([
-            "cities", "home", "places", "categories", "subcategories", "explore",
-            "services", "apps", "city_apps", "trips", "all",
+            "cities", "home", "places", "categories", "map_categories", "services",
+            "app_guides", "trips", "tips", "all",
+            "subcategories", "explore", "apps", "city_apps",
           ])
           .optional()
           .default("all"),
@@ -23,9 +24,11 @@ router.post(
     }),
   }),
   (req, res, next) => {
-    const configuredSecret =
-      process.env.INTERNAL_SYNC_SECRET || process.env.INTERNAL_NOTIFY_SECRET;
-    if (configuredSecret && req.get("X-Internal-Secret") !== configuredSecret) {
+    const configuredSecret = process.env.INTERNAL_SYNC_SECRET;
+    if (!configuredSecret) {
+      return next(new ApiError(503, "Internal sync webhook is not configured."));
+    }
+    if (req.get("X-Internal-Secret") !== configuredSecret) {
       return next(new ApiError(401, "Invalid internal notification secret"));
     }
 

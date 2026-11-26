@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const City = require("../models/City");
 const { ApiError } = require("../middleware/error");
+const { cityLookupFilter } = require("../utils/cityCollection");
 
 function publicUser(user) {
   return {
@@ -29,7 +30,7 @@ async function register(req, res, next) {
     if (await User.findOne({ email: normalizedEmail })) {
       throw new ApiError(409, "An account with this email already exists");
     }
-    const city = await City.findOne({ id: selectedCityId });
+    const city = await City.findOne(cityLookupFilter(selectedCityId)).lean();
     if (!city) throw new ApiError(400, "selectedCityId must reference a live city");
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -37,7 +38,7 @@ async function register(req, res, next) {
       fullName,
       email: normalizedEmail,
       passwordHash,
-      selectedCityId,
+      selectedCityId: String(city.id || city._id).toLocaleLowerCase(),
     });
 
     res.status(201).json({ token: signToken(user), user: publicUser(user) });

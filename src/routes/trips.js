@@ -21,7 +21,15 @@ const params = validate({
   }),
 });
 
-router.get("/", listTrips);
+router.get(
+  "/",
+  validate({
+    parse: ({ query }) => ({
+      query: z.object({ cityId: z.string().trim().min(1).optional() }).passthrough().parse(query),
+    }),
+  }),
+  listTrips
+);
 router.post(
   "/",
   validate({

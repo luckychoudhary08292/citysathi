@@ -1,6 +1,7 @@
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
+const mongoose = require("mongoose");
 
 const authRoutes = require("./src/routes/auth");
 const cityRoutes = require("./src/routes/cities");
@@ -34,12 +35,13 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false }));
 app.use(preventApiGetCaching);
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+const allowedOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
 function isAllowedOrigin(origin) {
+  if (allowedOrigins.includes("*")) return true;
   if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return true;
   let requested;
   try {
@@ -63,6 +65,10 @@ function isAllowedOrigin(origin) {
 
 app.use(
   cors({
+    allowedHeaders: [
+      "Content-Type", "Authorization", "X-User-Id", "X-Device-Id",
+      "Cache-Control", "Pragma", "X-Internal-Secret",
+    ],
     origin(origin, callback) {
       if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
@@ -74,6 +80,14 @@ app.use(
 );
 
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+app.get("/api/v1/health", (_req, res) => {
+  const mapsApiKey = process.env.MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || "";
+  res.status(200).json({
+    ok: true,
+    dbConnected: mongoose.connection.readyState === 1,
+    hasMapsApiKey: Boolean(mapsApiKey),
+  });
+});
 app.use(placeMutationEvents);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/admin", adminRoutes);

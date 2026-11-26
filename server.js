@@ -15,7 +15,8 @@ async function start() {
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is required");
   if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is required");
 
-  await mongoose.connect(process.env.MONGODB_URI);
+  const dbName = process.env.MONGODB_DB_NAME || "citysathi";
+  await mongoose.connect(process.env.MONGODB_URI, { dbName });
   console.log("MongoDB connected");
 
   const httpServer = http.createServer(app);

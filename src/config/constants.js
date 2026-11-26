@@ -13,5 +13,9 @@ const CATEGORY_VALUES = [
 ];
 
 const SERVICE_GROUPS = ["TRANSPORT", "COLLEGES", "PHARMACY", "EMERGENCY"];
+const SERVICE_ICON_KEYS = [
+  "phone", "ambulance", "shield-alert", "hospital", "pill", "banknote",
+  "train", "bus", "utensils", "graduation-cap", "building-2",
+];
 
-module.exports = { CATEGORY_VALUES, SERVICE_GROUPS };
+module.exports = { CATEGORY_VALUES, SERVICE_GROUPS, SERVICE_ICON_KEYS };

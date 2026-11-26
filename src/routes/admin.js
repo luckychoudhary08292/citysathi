@@ -7,11 +7,13 @@ const controller = require("../controllers/adminController");
 const {
   CATEGORY_VALUES: PLACE_CATEGORY_VALUES,
   SERVICE_GROUPS,
+  SERVICE_ICON_KEYS,
 } = require("../config/constants");
 
 const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const nullableUrl = z.union([z.string().url(), z.literal("")]).nullable();
+const httpUrl = z.string().url().refine((value) => /^https?:\/\//i.test(value));
 const objectBody = (schema) =>
   validate({ parse: ({ body }) => ({ body: schema.parse(body) }) });
 const idParams = validate({
@@ -42,6 +44,16 @@ const cityCreateBody = objectBody(z.object({
   latitude: z.number().finite().optional().default(22.7196),
   longitude: z.number().finite().optional().default(75.8577),
   heroImageUrl: nullableUrl.optional().default(null),
+  heroSubtitle: z.string().optional(),
+  promoBanner: z.object({
+    id: z.string().trim().min(1).optional(),
+    badgeText: z.string().optional(),
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+    ctaLabel: z.string().optional(),
+    imageUrl: nullableUrl.optional(),
+    targetRoute: z.enum(["plan_trip", "explore", "map", "services"]).optional(),
+  }).partial().nullable().optional(),
   collectionName: z.string().trim().regex(/^city_[a-z0-9_-]+$/i).optional(),
 }));
 const cityPatchBody = objectBody(z.object({
@@ -50,6 +62,16 @@ const cityPatchBody = objectBody(z.object({
   latitude: z.number().finite().optional(),
   longitude: z.number().finite().optional(),
   heroImageUrl: nullableUrl.optional(),
+  heroSubtitle: z.string().optional(),
+  promoBanner: z.object({
+    id: z.string().trim().min(1).optional(),
+    badgeText: z.string().optional(),
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+    ctaLabel: z.string().optional(),
+    imageUrl: nullableUrl.optional(),
+    targetRoute: z.enum(["plan_trip", "explore", "map", "services"]).optional(),
+  }).partial().nullable().optional(),
   collectionName: z.string().trim().regex(/^city_[a-z0-9_-]+$/i).optional(),
 }).refine((body) => Object.keys(body).length > 0, "Provide at least one city field."));
 const homeBody = objectBody(z.object({
@@ -103,43 +125,37 @@ const placePatchBody = objectBody(z.object({
 const categoryFields = {
   cityId: z.string().trim().min(1),
   category: z.enum(FIXED_CATEGORIES),
-  name: z.string().trim().optional(),
   title: z.string().trim().min(1).optional().default("Places & Attractions"),
-  label: z.string().trim().optional(),
-  type: z.string().trim().optional(),
   subCategories: z.array(z.string().trim().min(1)).optional().default([]),
-  items: z.array(z.string().trim().min(1)).optional(),
 };
 const categoryCreateBody = objectBody(z.object({
   id: z.string().trim().min(1).optional(),
   ...categoryFields,
 }));
 const categoryPatchBody = objectBody(z.object({
-  name: z.string().trim().min(1).optional(),
+  category: z.enum(FIXED_CATEGORIES).optional(),
   title: categoryFields.title.optional(),
-  label: z.string().trim().optional(),
-  type: z.string().trim().optional(),
   subCategories: categoryFields.subCategories.optional(),
-  items: categoryFields.items.optional(),
 }).refine((body) => Object.keys(body).length > 0, "Provide at least one category field."));
 
 const serviceStringFields = [
-  "name", "title", "highlightNumber", "number", "badgeNumber", "category", "group",
-  "subtitle", "description", "distanceOrHours", "address", "iconKey", "contactNumber",
+  "name", "highlightNumber", "category", "subtitle", "description",
+  "distanceOrHours", "address", "contactNumber",
 ];
 const serviceFields = Object.fromEntries(serviceStringFields.map((key) => [
   key,
-  key === "group"
-    ? z.enum(SERVICE_GROUPS).or(z.literal("")).optional().default("")
-    : z.string().optional().default(""),
+  z.string().optional().default(""),
 ]));
 Object.assign(serviceFields, {
+  group: z.enum(SERVICE_GROUPS),
+  serviceMode: z.enum(["CONTACT", "SERVICE_NAME"]),
+  iconKey: z.enum(SERVICE_ICON_KEYS),
   phone: z.string().nullable().optional().default(null),
   isUrgent: z.boolean().optional().default(false),
   sortOrder: z.number().int().optional().default(0),
   latitude: z.number().finite().optional().default(0),
   longitude: z.number().finite().optional().default(0),
-  actionUrl: nullableUrl.optional().default(null),
+  actionUrl: httpUrl.nullable().optional().default(null),
 });
 const serviceCreateBody = objectBody(z.object({
   id: z.string().trim().min(1).optional(),
@@ -156,13 +172,12 @@ const appStringFields = [
 ];
 const appFields = Object.fromEntries(appStringFields.map((key) => [key, z.string().optional().default("")]));
 Object.assign(appFields, {
-  highlightTag: z.string().nullable().optional().default(null),
-  badge: z.string().nullable().optional().default(null),
-  iconUrl: nullableUrl.optional().default(null),
-  playStoreUrl: nullableUrl.optional().default(null),
-  storeUrl: nullableUrl.optional().default(null),
-  packageName: z.string().nullable().optional().default(null),
-  websiteUrl: nullableUrl.optional().default(null),
+  highlightTag: z.string().optional().default(""),
+  iconUrl: z.string().optional().default(""),
+  playStoreUrl: z.string().optional().default(""),
+  storeUrl: z.string().optional().default(""),
+  packageName: z.string().optional().default(""),
+  websiteUrl: z.string().optional().default(""),
   sortOrder: z.number().int().optional().default(0),
 });
 const appCreateBody = objectBody(z.object({
@@ -176,11 +191,12 @@ const appPatchBody = objectBody(z.object({
 const mapCategoryCreateBody = objectBody(z.object({
   id: z.string().trim().min(1).optional(),
   cityId: z.string().trim().min(1),
-  name: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(80).refine((value) => value.toLocaleLowerCase() !== "all"),
   sortOrder: z.number().int().optional().default(0),
 }));
 const mapCategoryPatchBody = objectBody(z.object({
-  name: z.string().trim().min(1).max(80).optional(),
+  name: z.string().trim().min(1).max(80)
+    .refine((value) => value.toLocaleLowerCase() !== "all").optional(),
   sortOrder: z.number().int().optional(),
 }).refine((body) => Object.keys(body).length > 0, "Provide a name or sortOrder."));
 const mapCategoryListQuery = validate({
@@ -226,7 +242,7 @@ router.post("/apps", appCreateBody, asyncHandler(controller.createApp));
 router.patch("/apps/:id", idParams, appPatchBody, asyncHandler(controller.updateApp));
 router.delete("/apps/:id", idParams, asyncHandler(controller.deleteApp));
 
-router.get("/tips", asyncHandler(controller.listTips));
+router.get("/tips", cityListQuery, asyncHandler(controller.listTips));
 router.delete("/tips/:id", idParams, asyncHandler(controller.deleteTip));
 
 module.exports = router;

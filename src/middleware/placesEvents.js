@@ -4,16 +4,17 @@ function emitPlacesUpdated(req, cityId = "") {
 
   const payload = {
     type: "DATA_UPDATED",
-    cityId,
+    cityId: String(cityId || "").trim().toLocaleLowerCase(),
     scope: "places",
     action: req.method,
     timestamp: Date.now(),
   };
 
-  if (cityId) {
-    io.to(`city:${cityId}`).to("city:none").emit("data-updated", payload);
-  } else {
-    io.emit("data-updated", payload);
+  for (const eventName of ["places-updated", "data-updated", "data_updated"]) {
+    io.emit(eventName, payload);
+    if (payload.cityId) {
+      io.to(`city:${payload.cityId}`).emit(eventName, payload);
+    }
   }
 }
 

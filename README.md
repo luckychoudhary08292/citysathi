@@ -4,8 +4,8 @@ Node.js, Express, and MongoDB REST API for the City Companion Android app.
 
 ## MongoDB layout
 
-- `cities`: city selector metadata and each city's personal collection name.
-- `city_<cityId>`: that city's `home_meta`, `place`, `service`, and `app` documents.
+- `cities`: city selector, hero image/subtitle, and promo banner. `collectionName` is always `city_<id>`.
+- `city_<cityId>`: that city's `place`, `service`, and `app_guide` documents, distinguished by `docType`.
 - `categories`: fixed parent categories and city-specific sub-category filters.
 - `map_categories`: ordered, custom Map filter chips scoped to a city.
 - `trips`: user-scoped trip plans and checkpoints.
@@ -16,6 +16,12 @@ Node.js, Express, and MongoDB REST API for the City Companion Android app.
 
 - Node.js 18+
 - MongoDB Atlas or local MongoDB
+
+The backend connects to `MONGODB_DB_NAME` (defaults to `citysathi`) even if the URI contains a different database path.
+
+#### Existing Map Category Index Migration
+
+Older backend versions added a unique `cityId + nameLower` index to `map_categories`. The current Admin schema intentionally stores only `id`, `cityId`, `name`, and `sortOrder`; an old unique index can reject multiple new chips because their `nameLower` field is absent. Before deploying over a database created by an older version, inspect `db.map_categories.getIndexes()` in `mongosh`. If it shows the obsolete unique index on `{ cityId: 1, nameLower: 1 }`, back up the database and drop that index by its reported name (commonly `cityId_1_nameLower_1`). Do not drop other indexes.
 
 ## Local setup
 
@@ -83,9 +89,9 @@ Admin CRUD endpoints:
 
 Public city service endpoints are `GET /api/v1/cities/:cityId/services` and `GET /api/v1/cities/:cityId/apps`. Service `highlightNumber` is optional, so map-category services without a phone/number are accepted. Compatibility aliases are `GET /api/v1/services?cityId=...` and `GET /api/v1/apps?cityId=...`.
 
-The Map API is available at `GET /api/v1/cities/:cityId/map` and the compatible `GET /api/v1/cities/:cityId/map-services`, optionally with `?filter=<chip>`. Responses include `mapSubCategories`, `places`, `services`, and `cityApps` (`apps` is retained as a compatibility alias). Custom chips managed at `/api/v1/admin/map-categories` take precedence; if none exist for a city, chips are derived from that city's services. Map configuration is available at `GET /api/v1/map/config` and `GET /api/v1/config`; configure `MAPS_API_KEY` (or `GOOGLE_MAPS_API_KEY`) in the backend environment.
+The Map API is available at `GET /api/v1/cities/:cityId/map` and the compatible `GET /api/v1/cities/:cityId/map-services`, optionally with `?filter=<chip>`. Responses include `mapSubCategories`, `places`, `services`, and `cityApps`. Custom chips managed at `/api/v1/admin/map-categories` take precedence; if none exist for a city, chips are derived from that city's services. Map configuration is available at `GET /api/v1/map/config` and `GET /api/v1/config`; configure `MAPS_API_KEY` (or `GOOGLE_MAPS_API_KEY`) in the backend environment. `/api/v1/health` reports database connectivity and whether a Maps key is configured without returning the key.
 
-Public API GET responses include no-cache headers. CORS allows requests without an Origin header and accepts both HTTP and HTTPS for configured hosts in `ALLOWED_ORIGINS`.
+Public API GET responses include no-cache headers. CORS allows requests without an Origin header and accepts both HTTP and HTTPS for configured hosts in `CORS_ORIGIN` (or the legacy `ALLOWED_ORIGINS`). Preflight requests allow `Content-Type`, `Authorization`, `X-User-Id`, `X-Device-Id`, `Cache-Control`, and `Pragma`.
 
 Register:
 
@@ -140,18 +146,18 @@ curl -X POST http://localhost:5000/api/v1/places/rajwada_palace_indore/tips \
 
 ## Real-time updates
 
-The HTTP server also serves Socket.IO at `/socket.io`. Android clients may connect using polling or WebSocket, optionally with `cityId` in the handshake query. Clients can emit `join_city` with `{ "cityId": "indore" }` and `leave_city` with the same shape. Updates arrive as `data_updated` events containing `type`, `cityId`, `scope`, and `timestamp`.
+The HTTP server also serves Socket.IO at `/socket.io`. Android clients may connect using polling or WebSocket, optionally with `cityId` in the handshake query. Clients can emit `join_city` with `{ "cityId": "indore" }` or `"indore"` and `leave_city` with the same shape. Updates arrive as `data-updated` (also `data_updated`) plus scope-specific events such as `places-updated`, containing `type`, `cityId`, `scope`, and `timestamp`.
 
 When MongoDB supports change streams, updates are broadcast automatically from database changes. On standalone MongoDB, an admin service can notify connected clients with:
 
 ```bash
 curl -X POST http://localhost:5000/api/v1/internal/notify-change \
   -H "Content-Type: application/json" \
-  -H "X-Internal-Secret: YOUR_INTERNAL_NOTIFY_SECRET" \
+  -H "X-Internal-Secret: YOUR_INTERNAL_SYNC_SECRET" \
   -d '{"cityId":"indore","scope":"places"}'
 ```
 
-Set `INTERNAL_SYNC_SECRET` in the server environment to require the matching header. The legacy `INTERNAL_NOTIFY_SECRET` is also accepted. If neither is set, the webhook does not require the header.
+Set `INTERNAL_SYNC_SECRET` in the server environment. The endpoint returns `503` until configured and rejects requests whose `X-Internal-Secret` does not match.
 
 Successful `POST`, `PUT`, or `DELETE` requests to `/api/v1/places`, `/api/v1/places/:id`, or `/api/v1/cities/:cityId/places` emit a `data-updated` Socket.IO event with `type`, `cityId`, `scope: "places"`, `action`, and `timestamp`. City-targeted events go to that city's room and clients without a selected city.
 
@@ -191,7 +197,9 @@ curl -X PATCH http://localhost:5000/api/v1/user/preferences \
 
 ## Deployment
 
-Set `MONGODB_URI`, `JWT_SECRET`, `ALLOWED_ORIGINS` (optional comma-separated list), and `PORT` as environment variables. Ensure the required city and category data is provisioned by your admin/data-management process; application startup does not seed it.
+Set `MONGODB_URI`, `MONGODB_DB_NAME` (defaults to `citysathi`), `JWT_SECRET`, `MAPS_API_KEY` (optional), `CORS_ORIGIN` (optional comma-separated list), and `PORT` as environment variables. Ensure the required city and category data is provisioned by your admin/data-management process; application startup does not seed it.
+
+Run the backend regression tests with `npm test`.
 
 Docker:
 

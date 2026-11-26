@@ -23,6 +23,7 @@ router.post(
         rating: z.number().min(0).max(5),
         timestamp: z.number().finite().optional(),
         placeId: z.string().trim().optional(),
+        cityId: z.string().trim().optional(),
       }).parse(body),
     }),
   }),

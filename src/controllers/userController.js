@@ -1,7 +1,10 @@
 const City = require("../models/City");
+const mongoose = require("mongoose");
 const { getCityCollection } = require("../utils/cityCollection");
 const { ApiError } = require("../middleware/error");
 const { stringId, mongoId, stringArray } = require("../utils/serialization");
+const { cityLookupFilter } = require("../utils/cityCollection");
+const { emitLiveUpdate } = require("../services/liveUpdates");
 
 function subdocumentJson(document, arrayFields = []) {
   const value = typeof document.toObject === "function" ? document.toObject() : document;
@@ -23,10 +26,19 @@ async function activity(req, res) {
 async function validatePlace(placeId) {
   if (placeId) {
     const cities = await City.find({}).select("id collectionName").lean();
+    const placeIdClauses = [{ id: String(placeId) }];
+    if (/^[a-f\d]{24}$/i.test(String(placeId))) {
+      placeIdClauses.push({ _id: new mongoose.Types.ObjectId(String(placeId)) });
+    }
     const matches = await Promise.all(
       cities.map(async (city) => {
-        const collection = await getCityCollection(city.id);
-        return collection.findOne({ id: placeId, docType: "place" });
+        const collection = await getCityCollection(stringId(city));
+        return collection.findOne({
+          $and: [
+            { $or: placeIdClauses },
+            { docType: "place" },
+          ],
+        });
       })
     );
     if (!matches.some(Boolean)) throw new ApiError(404, "Place not found");
@@ -67,15 +79,19 @@ async function createPlan(req, res) {
   req.user.tripPlans.push(req.body);
   await req.user.save();
   res.status(201).json(subdocumentJson(req.user.tripPlans[req.user.tripPlans.length - 1], ["placeIds"]));
+  emitLiveUpdate({ cityId: req.user.selectedCityId, scope: "trips" });
 }
 
 async function updatePlan(req, res, next) {
   try {
-    const plan = req.user.tripPlans.id(req.params.planId);
+    const plan = req.user.tripPlans.find((item) =>
+      stringId(item) === req.params.planId || mongoId(item) === req.params.planId
+    );
     if (!plan) throw new ApiError(404, "Trip plan not found");
     Object.entries(req.body).forEach(([key, value]) => { plan[key] = value; });
     await req.user.save();
     res.status(200).json(subdocumentJson(plan, ["placeIds"]));
+    emitLiveUpdate({ cityId: req.user.selectedCityId, scope: "trips" });
   } catch (error) {
     next(error);
   }
@@ -83,11 +99,14 @@ async function updatePlan(req, res, next) {
 
 async function deletePlan(req, res, next) {
   try {
-    const plan = req.user.tripPlans.id(req.params.planId);
+    const plan = req.user.tripPlans.find((item) =>
+      stringId(item) === req.params.planId || mongoId(item) === req.params.planId
+    );
     if (!plan) throw new ApiError(404, "Trip plan not found");
     req.user.tripPlans.pull(plan._id);
     await req.user.save();
     res.status(200).json({ deleted: true, planId: req.params.planId });
+    emitLiveUpdate({ cityId: req.user.selectedCityId, scope: "trips" });
   } catch (error) {
     next(error);
   }
@@ -107,9 +126,9 @@ async function addContribution(req, res, next) {
 async function updatePreferences(req, res, next) {
   try {
     if (req.body.selectedCityId) {
-      const city = await City.findOne({ id: req.body.selectedCityId });
+      const city = await City.findOne(cityLookupFilter(req.body.selectedCityId)).lean();
       if (!city) throw new ApiError(400, "selectedCityId must reference a live city");
-      req.user.selectedCityId = req.body.selectedCityId;
+      req.user.selectedCityId = String(city.id || city._id).toLocaleLowerCase();
     }
     if (typeof req.body.notificationsEnabled === "boolean") {
       req.user.notificationsEnabled = req.body.notificationsEnabled;

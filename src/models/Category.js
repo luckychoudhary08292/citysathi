@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const categorySchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
@@ -10,11 +9,7 @@ const categorySchema = new mongoose.Schema(
       enum: ["HERITAGE", "FOOD", "SHOPPING", "ENTERTAINMENT", "NATURE", "CULTURE"],
     },
     title: { type: String, required: true },
-    name: { type: String, default: "" },
-    label: { type: String, default: "" },
-    type: { type: String, default: "EXPLORE" },
     subCategories: { type: [String], default: [] },
-    items: { type: [String], default: [] },
   },
   { versionKey: false, collection: "categories" }
 );

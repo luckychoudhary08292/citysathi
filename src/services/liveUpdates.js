@@ -1,27 +1,29 @@
 const { Server } = require("socket.io");
 
 let io;
-const recentEmits = new Map();
-const DEBOUNCE_MS = 150;
 const CITY_SCOPED_SCOPES = new Set([
-  "home", "places", "categories", "subcategories", "explore",
-  "services", "apps", "city_apps", "trips",
+  "cities", "home", "places", "categories", "subcategories", "explore",
+  "map_categories", "services", "apps", "app_guides", "city_apps", "trips", "tips",
 ]);
 const VALID_SCOPES = new Set([
   "cities", "home", "categories", "subcategories", "explore", "places",
-  "services", "apps", "city_apps", "trips", "all",
+  "map_categories", "services", "apps", "app_guides", "city_apps",
+  "trips", "tips", "all",
 ]);
 const SCOPE_EVENTS = {
   cities: ["cities-updated"],
   home: ["home-updated"],
   categories: ["categories-updated"],
+  map_categories: ["categories-updated", "map-categories-updated"],
   subcategories: ["categories-updated"],
   explore: ["categories-updated"],
   places: ["places-updated"],
   services: ["services-updated"],
   apps: ["apps-updated"],
+  app_guides: ["apps-updated", "app-guides-updated"],
   city_apps: ["apps-updated"],
   trips: ["trips-updated"],
+  tips: ["tips-updated"],
 };
 
 function emitLiveUpdate({
@@ -33,14 +35,10 @@ function emitLiveUpdate({
 } = {}) {
   if (!io) return;
   if (!VALID_SCOPES.has(scope)) scope = "all";
-
-  const key = `${cityId}\u0000${scope}`;
   const now = Date.now();
-  const previous = recentEmits.get(key);
-  if (previous && now - previous < DEBOUNCE_MS) return;
-  recentEmits.set(key, now);
+  const normalizedCityId = cityId == null ? "" : String(cityId).trim().toLocaleLowerCase();
 
-  const payload = { type, cityId, scope };
+  const payload = { type, cityId: normalizedCityId, scope };
   if (["POST", "PUT", "DELETE"].includes(action)) payload.action = action;
   payload.timestamp = now;
   const eventNames = [...new Set([
@@ -52,55 +50,69 @@ function emitLiveUpdate({
   const emit = (operator) => {
     for (const eventName of eventNames) operator.emit(eventName, payload);
   };
-  if (cityId && cityId !== "all" && CITY_SCOPED_SCOPES.has(scope)) {
-    const room = `city:${cityId}`;
-    emit(io.to(room).to("city:none"));
-  } else {
-    emit(io);
+  emit(io);
+  if (normalizedCityId && normalizedCityId !== "all" && CITY_SCOPED_SCOPES.has(scope)) {
+    emit(io.to(`city:${normalizedCityId}`));
   }
 }
 
 function initSocketServer(httpServer) {
   io = new Server(httpServer, {
-    cors: { origin: "*" },
+    cors: {
+      origin: "*",
+      allowedHeaders: [
+        "Content-Type", "Authorization", "X-User-Id", "X-Device-Id",
+        "Cache-Control", "Pragma", "X-Internal-Secret",
+      ],
+    },
     transports: ["polling", "websocket"],
   });
 
   io.on("connection", (socket) => {
     const initialCityId = socket.handshake.query.cityId;
     if (typeof initialCityId === "string" && initialCityId.trim()) {
-      const cityId = initialCityId.trim();
-      socket.data.cityId = cityId;
-      socket.join(`city:${cityId}`);
+      joinCity(socket, initialCityId);
     } else {
       socket.join("city:none");
     }
 
-    socket.on("join_city", (payload = {}) => {
-      const { cityId } = payload;
-      if (typeof cityId !== "string" || !cityId.trim()) return;
-
-      for (const room of socket.rooms) {
-        if (room.startsWith("city:")) socket.leave(room);
-      }
-      socket.data.cityId = cityId.trim();
-      socket.join(`city:${socket.data.cityId}`);
-    });
+    socket.on("join_city", (payload = {}) => joinCity(socket, payload));
 
     socket.on("leave_city", (payload = {}) => {
-      const { cityId } = payload;
-      if (typeof cityId === "string" && cityId.trim()) {
-        const normalizedCityId = cityId.trim();
-        socket.leave(`city:${normalizedCityId}`);
-        if (socket.data.cityId === normalizedCityId) {
-          delete socket.data.cityId;
-          socket.join("city:none");
+      const cityId = cityIdFromPayload(payload);
+      if (!cityId) return;
+      const normalizedCityId = cityId.toLocaleLowerCase();
+      for (const room of socket.rooms) {
+        if (room !== "city:none" && room.startsWith("city:") &&
+            room.slice("city:".length).toLocaleLowerCase() === normalizedCityId) {
+          socket.leave(room);
         }
+      }
+      if (socket.data.cityId?.toLocaleLowerCase() === normalizedCityId) {
+        delete socket.data.cityId;
+        socket.join("city:none");
       }
     });
   });
 
   return io;
+}
+
+function cityIdFromPayload(payload) {
+  const value = typeof payload === "string" ? payload : payload?.cityId;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function joinCity(socket, payload) {
+  const cityId = cityIdFromPayload(payload);
+  if (!cityId) return;
+  for (const room of socket.rooms) {
+    if (room.startsWith("city:")) socket.leave(room);
+  }
+  const normalizedCityId = cityId.toLocaleLowerCase();
+  socket.data.cityId = cityId;
+  socket.join(`city:${normalizedCityId}`);
+  if (cityId !== normalizedCityId) socket.join(`city:${cityId}`);
 }
 
 function inferCityCollectionUpdate(change) {
@@ -114,7 +126,7 @@ function inferCityCollectionUpdate(change) {
   const scope =
     docType === "home_meta" ? "home" :
       docType === "service" ? "services" :
-          docType === "app" ? "apps" :
+          docType === "app_guide" || docType === "app" ? "app_guides" :
             docType === "place" ? "places" : "all";
 
   return { cityId, scope };
@@ -149,7 +161,13 @@ function startChangeStreamWatcher(db) {
 
     const collection = change.ns?.coll;
     if (collection === "cities") {
-      emitLiveUpdate({ cityId: "", scope: "cities" });
+      const cityId = change.fullDocument?.id || "";
+      emitLiveUpdate({ cityId, scope: "cities" });
+      const changedFields = Object.keys(change.updateDescription?.updatedFields || {});
+      if (change.operationType === "insert" ||
+          changedFields.some((field) => /^(heroSubtitle|heroImageUrl|promoBanner)(\.|$)/.test(field))) {
+        emitLiveUpdate({ cityId, scope: "home" });
+      }
     } else if (collection === "categories") {
       emitLiveUpdate({ cityId: change.fullDocument?.cityId || "", scope: "categories" });
     } else if (collection === "trips") {
@@ -157,9 +175,10 @@ function startChangeStreamWatcher(db) {
     } else if (collection === "map_categories") {
       emitLiveUpdate({
         cityId: change.fullDocument?.cityId || "",
-        scope: "categories",
-        eventAliases: ["map-categories-updated"],
+        scope: "map_categories",
       });
+    } else if (collection === "tips") {
+      emitLiveUpdate({ cityId: change.fullDocument?.cityId || "", scope: "tips" });
     } else {
       const update = inferCityCollectionUpdate(change);
       if (update) emitLiveUpdate(update);
@@ -218,7 +237,6 @@ function startChangeStreamWatcher(db) {
 function closeSocketServer() {
   const current = io;
   io = undefined;
-  recentEmits.clear();
   return new Promise((resolve) => {
     if (!current) return resolve();
     current.close(() => resolve());
